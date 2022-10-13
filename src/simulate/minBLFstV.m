@@ -113,24 +113,25 @@ sTF = repmat(1/4,4*nelem,1)*helem^2;
 TF = sparse(iTF,jTF,sTF);                           % Actual integration of NdA
 TF0 = sparse(iTF, jTF, sTF/helem^2);                % Used to average nodal values
 %% Initialize optimization
-maxloop = 200;
 volfrac = 0.5;
 x = volfrac*ones(nelem,1);
 x(T(:,5)==1) = 1e-6;    % voids
 x(T(:,5)==2) = 1-1e-6;  % solids
+maxloop = 200;
+jumpstart = 100;
 beta = 1;
 njumps = 4;
 betamax = 8;
 dbeta = (betamax/beta)^(1/njumps); % factor for multiplying beta
-pace = min(20,floor(maxloop/(njumps+1)));
+pace = min(20, floor((maxloop-jumpstart)/(njumps+1)));
 loop = 0;
 Stats = zeros(maxloop,20);
 %% CA variables
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = 1;
-SOLVE_EIGS_EXACTLY = 1;
-SOLVE_ADJT_EXACTLY = 1;
+SOLVE_STAT_EXACTLY = 0;
+SOLVE_EIGS_EXACTLY = 0;
+SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
 NBASIS_STAT = 08;
 NBASIS_EIGS = 04;
