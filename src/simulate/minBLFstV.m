@@ -5,7 +5,7 @@
 % close all;
 % commandwindow;
 % clc;
-% tic;
+tic;
 %% Choose problem type
 prtype = 'WEIGHTED';   % Gradually adds weight to x'*(1-x) to promote discrete design
 % prtype = 'BLF';                   % Maximize the buckling load factor
@@ -16,14 +16,14 @@ weightmin = 0.2;
 domain = 'column';                  % other options are: 'ubracket' 'biclamped'
 sizex = 200;                        % physical size in x-direction
 sizey = 40;                         % physical size in y-direction
-helem = 1;                       % element size (all elements are square)
+helem = 1;                          % element size (all elements are square)
 %% Optimization parameters
 pE = 3;                             % SIMP penalty for linear stiffness
 pS = 3;                             % SIMP penalty for stress stiffness
 pN = 8;                             % p-norm for eigenvalues
 rmin = 0.10*sizey;                  % filter radius (for convolution density filter)
 nevals = 6;                         % number of eigenvalues to consider
-filename = 'processed_data/column_trial6.mat';
+filename = sprintf('processed_data/column_trial%i.mat', numel(dir('processed_data'))-1)
 %% Material properties
 Emax = 2e5;
 Emin = Emax*1e-6;
@@ -128,9 +128,9 @@ Stats = zeros(maxloop,20);
 %% CA variables
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = false;
-SOLVE_EIGS_EXACTLY = false;
-SOLVE_ADJT_EXACTLY = false;
+SOLVE_STAT_EXACTLY = 1;
+SOLVE_EIGS_EXACTLY = 1;
+SOLVE_ADJT_EXACTLY = 1;
 % Number of basis vectors
 NBASIS_STAT = 08;
 NBASIS_EIGS = 04;
