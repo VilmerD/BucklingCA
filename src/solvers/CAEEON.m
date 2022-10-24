@@ -1,21 +1,20 @@
-function [V, U, T] = CAEEON(A, B, Rold, Bold, Pold, s, VO)
-% V = CAEEON(A, B, Rold, Bold, Pold, s, VO) computes s basis vectors using CA for
+function [V, U, T] = CAEEON(A, B, Rold, Pold, Bold, Xold, s, XO)
+% V = CAEEON(A, B, Rold, Bold, Xold, s, XO) computes s basis vectors using CA for
 % the eigenvalue problem (A - l*B)x = 0. R is the cholesky factorization of the 
-% old matrix Bold. Pold are the old eigenmodes and V0 are vectors to which
+% old matrix Bold. Xold are the old eigenvectors and X0 are vectors to which
 % the basis vectors are orthogonalized. 
 % 
-% [V, U, T] = CAEEON(A, B, Rold, Bold, Pold, s, VO) computes the basis vectors and returns the 
+% [V, U, T] = CAEEON(A, B, Rold, Bold, Xold, s, XO) computes the basis vectors and returns the 
 % intermediate basis vectors required for a consistent sensitivity analysis.
-m = size(VO, 2);
+m = size(XO, 2);
 dB = B - Bold;
 
 % Compute first basis vector.
-ui = Rold\(Rold'\(A*Pold));
+ui = Pold*(Rold\(Rold'\(Pold'*(A*Xold))));
 ti = ui/sqrt(ui'*B*ui);
 vi = ti;
 for j = 1:m
-    vj = VO(:, j);
-    vi = vi - (ti'*A*vj)*vj;
+    vi = vi - (vi'*A*XO(:, j))*XO(:, j);
 end
 U = ui;
 T = ti;
@@ -23,7 +22,7 @@ V = vi;
 
 % Compute remaining basis vectors
 for i = 2:s
-    ui = -Rold\(Rold'\(dB*ti));
+    ui = -Pold*(Rold\(Rold'\(Pold'*(dB*ti))));
     
     % Normalize
     ti = ui/sqrt(ui'*B*ui);
@@ -31,8 +30,7 @@ for i = 2:s
     % Orthogonalize
     vi = ti;
     for j = 1:m
-        vj = VO(:, j);
-        vi = vi - (ti'*A*vj)*vj;
+        vi = vi - (vi'*A*XO(:, j))*XO(:, j);
     end
     
     U(:, i) = ui;

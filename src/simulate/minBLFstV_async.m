@@ -7,23 +7,23 @@
 % clc;
 tic;
 %% Choose problem type
-prtype = 'WEIGHTED';   % Gradually adds weight to x'*(1-x) to promote discrete design
+% prtype = 'WEIGHTED';   % Gradually adds weight to x'*(1-x) to promote discrete design
 % prtype = 'BLF';                   % Maximize the buckling load factor
 % prtype =  'COMP';                 % Minimize compliance
 weight = 1;
-weightmin = 0.2;
+weightmin = 0.6;
 %% Domain size and discretization
 domain = 'column';                  % other options are: 'ubracket' 'biclamped'
-sizex = 200;                        % physical size in x-direction
-sizey = 40;                         % physical size in y-direction
+sizex = 400;                        % physical size in x-direction
+sizey = 80;                         % physical size in y-direction
 helem = 1;                          % element size (all elements are square)
 %% Optimization parameters
 pE = 3;                             % SIMP penalty for linear stiffness
 pS = 3;                             % SIMP penalty for stress stiffness
 pN = 8;                             % p-norm for eigenvalues
-rmin = 0.10*sizey;                  % filter radius (for convolution density filter)
+rmin = 0.06*sizey;                  % filter radius (for convolution density filter)
 nevals = 6;                         % number of eigenvalues to consider
-filename = sprintf('processed_data/column_trial%i.mat', numel(dir('processed_data'))-1)
+filename = sprintf('processed_data/column_trial%i.mat', numel(dir('processed_data'))-1);
 %% Material properties
 Emax = 2e5;
 Emin = Emax*1e-6;
@@ -118,20 +118,22 @@ x = volfrac*ones(nelem,1);
 x(T(:,5)==1) = 1e-6;    % voids
 x(T(:,5)==2) = 1-1e-6;  % solids
 maxloop = 200;
-jumpstart = 100;
+jumpnext = 30;
 beta = 1;
 njumps = 4;
 betamax = 8;
 dbeta = (betamax/beta)^(1/njumps); % factor for multiplying beta
-pace = min(20, floor((maxloop-jumpstart)/(njumps+1)));
+qweight = 1.2;
+pace = min(20, floor((maxloop-jumpnext)/(njumps+1)));
+changetol = 1e-1;
 loop = 0;
-Stats = zeros(maxloop,20);
+Stats = zeros(maxloop,6+nevals);
 %% CA variables
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = 0;
-SOLVE_EIGS_EXACTLY = 0;
-SOLVE_ADJT_EXACTLY = 0;
+SOLVE_STAT_EXACTLY = 1;
+SOLVE_EIGS_EXACTLY = 1;
+SOLVE_ADJT_EXACTLY = 1;
 % Number of basis vectors
 NBASIS_STAT = 08;
 NBASIS_EIGS = 04;
@@ -164,12 +166,17 @@ c_MMA = 1000*ones(m,1);     % column vector with the constants c_i in the terms 
 d     = ones(m,1);          % column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
 fval = ones(m,1);           % initial constraint values
 %% Start iteration
-while ((loop < maxloop || beta<0.99*betamax) || fval(1,1) > 0)
+while ((loop < maxloop || beta<0.99*betamax || weight >1.01*weightmin) || fval(1,1) > 0)
     %% Continuation
-    CONTINUATION_UPDATE = loop>0 && mod(loop, pace) == 0;
+    CONTINUATION_UPDATE = ...
+        loop >= jumpnext && ...
+        change <= changetol;
     if CONTINUATION_UPDATE
+        if beta == betamax
+            weight = max(weight/qweight,weightmin);
+        end
         beta = min(beta*dbeta,betamax);
-        weight = max(weight/1.1,weightmin);
+        jumpnext = jumpnext + pace;
     end
     loop = loop + 1;
     %% PDE filtering and single projection
@@ -317,7 +324,7 @@ while ((loop < maxloop || beta<0.99*betamax) || fval(1,1) > 0)
     dmu_max_app(:) =    TF0'*(LF'\(LF\(TF*dmu_max_app(:))));
     dmnd(:) =           TF0'*(LF'\(LF\(TF*dmnd(:))));
     %% Draw design and stress
-    figure(1);
+%     figure(1);
     clf;
     v_img = xPhys;
     top_img = sparse(i_img,j_img,v_img);
@@ -383,9 +390,10 @@ while ((loop < maxloop || beta<0.99*betamax) || fval(1,1) > 0)
     fprintf(' ITER: %3i BLF_acc: %+10.3e BLF_app: %+10.3e OBJ: %+10.3e CONST: %+10.3e CH: %5.3f BETAHS: %6.3f WEIGHT: %4.3f EXACT: %1i \n',...
         loop,lambda_min_acc,lambda_min_app,f0val,fval(1,1),change,beta,weight, SOLVE_EXACTLY);
     %% Save data
-    Stats(loop,1:12) = [lambda_min_acc lambda_min_app f0val fval' beta lambda' weight];
+    Stats(loop,1:6+nevals) = [lambda_min_acc lambda_min_app f0val fval' beta lambda' weight];
 end
 runtime = toc;
+fprintf('Saving data to: %s\n', filename);
 save(filename);
 
 

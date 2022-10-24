@@ -1,5 +1,5 @@
-%% Minimum max gamma (1/lambda) s.t. volume
-% Approximation of max gamma using p-norm
+%% Minimum max mu (1/lambda) s.t. volume
+% Approximation of max mu using p-norm
 % Single density field with eta=0.5
 clear;
 % close all;
@@ -8,23 +8,14 @@ commandwindow;
 clc;
 tic;
 %% Choose problem type
-% prtype = 'WEIGHTED';   % Gradually adds weight to x'*(1-x) to promote discrete design
-% prtype = 'BLF';                   % Maximize the buckling load factor
-% prtype =  'COMP';                 % Minimize compliance
-prtype =  'COMP_ST_BLF';            % Minimize compliance subject to buckling const.
-weight = 1;
-mustar = 1/10;
+% prtype = 'WEIGHTED';                    % Gradually adds weight to x'*(1-x) to promote discrete design
+% prtype = 'BLF';                         % Maximize the buckling load factor
+% prtype =  'COMP';                       % Minimize compliance
+prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
 domain = 'twobar';                  % options are: 'column' 'spire' 'twobar'
-sizex = 150;                         % physical size in x-direction
-sizey = 300;                        % physical size in y-direction
-helem = 001;                          % element size (all elements are square)
-fig.Position(3:4) = [sizex*1.20 sizey*3*1.20]/sizex*400;
+helem = 1.00;                          % element size (all elements are square)
 %% Optimization parameters
-pE = 3;                             % SIMP penalty for linear stiffness
-pS = 3;                             % SIMP penalty for stress stiffness
-pN = 8;                             % p-norm for eigenvalues
-rmin = 5;                           % filter radius (for convolution density filter)
 nevals = 6;                         % number of eigenvalues to consider
 filename = sprintf('processed_data/%s_trial%i.mat', domain, numel(dir('processed_data'))-1);
 %% Material properties
@@ -37,12 +28,26 @@ nu = 0.3;
 % i_img,j_img = for displaying design as a matrix using imagesc
 switch domain
     case 'column'
+        sizex = 400;
+        sizey = 080;
+        lamstar = 7.0;
+        volfrac = 0.50;     % volume fraction
         [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_column(sizex,sizey,helem,false);
     case 'spire'
+        sizex = 300;
+        sizey = 150;
+        lamstar = 7.3;
+        volfrac = 0.35;     % volume fraction
         [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_spire(sizex,sizey,helem,false);
     case 'twobar'
+        sizex = 120;
+        sizey = 280;
+        lamstar = 8.0;
+        volfrac = 0.20;
         [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,helem,false);
 end
+rmin = 0.05*min(sizex, sizey); % filter radius (for convolution density filter)
+fig.Position(3:4) = [sizex*1.10 sizey*1*1.20]/sizex*400;
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -74,7 +79,7 @@ BNL = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 -1/2 0 1/2 0 1/2];          % BNL matrix
 %% Prepare augmented PDE filter (with Robin BC)
 xi = 1;                     % default for Robin BC (ratio l_s/l_o)
-xi_corner = 1;             	% large xi near re-entrant corner
+xi_corner = xi;             	% large xi near re-entrant corner
 l_o = rmin/2/sqrt(3);       % bulk length scale parameter
 l_s = l_o*xi;               % default surface length scale parameter
 % PDE filter stiffness matrix
@@ -86,66 +91,67 @@ jKF = reshape(kron(edofMatF,ones(1,4))',16*nelem,1);
 sKF = reshape(KEF(:)*ones(1,nelem),16*nelem,1);
 % PDE filter "mass" matrix
 sMF = 0*sKF;
-ME1 = l_s*helem*[2 0 0 1; 0 0 0 0; 0 0 0 0; 1 0 0 2]/6;                        % mass matrix left face (1&4)
+ME1 = l_s*helem*[2 0 0 1; 0 0 0 0; 0 0 0 0; 1 0 0 2]/6;                        % mass matrix left   face (1&4)
 ME2 = l_s*helem*[2 1 0 0; 1 2 0 0; 0 0 0 0; 0 0 0 0]/6;                        % mass matrix bottom face (1&2)
-ME31 = l_s*helem*[0 0 0 0; 0 2 1 0; 0 1 2 0; 0 0 0 0]/6;                       % mass matrix right face, standard (2&3)
-ME32 = l_s*helem*(xi_corner/xi)*[0 0 0 0; 0 2 1 0; 0 1 2 0; 0 0 0 0]/6;        % mass matrix right face, corner (2&3)
-ME41 = l_s*helem*[0 0 0 0; 0 0 0 0; 0 0 2 1; 0 0 1 2]/6;                       % mass matrix top face, standard (3&4)
-ME42 = l_s*helem*(xi_corner/xi)*[0 0 0 0; 0 0 0 0; 0 0 2 1; 0 0 1 2]/6;        % mass matrix top face, corner (3&4)
+ME31 = l_s*helem*[0 0 0 0; 0 2 1 0; 0 1 2 0; 0 0 0 0]/6;                       % mass matrix right  face (2&3)
+ME41 = l_s*helem*[0 0 0 0; 0 0 0 0; 0 0 2 1; 0 0 1 2]/6;                       % mass matrix top    face (3&4)
 % Populate "mass" matrix
 idv = zeros(1,nelem);                               % identifies elements for the boundary surface terms
 idv = idv*0; idv(T(:,9)==1) = 1;                    % left face
 sMF = sMF + reshape(ME1(:)*idv,16*nelem,1);
 idv = idv*0; idv(T(:,10)==1) = 1;                   % bottom face
 sMF = sMF + reshape(ME2(:)*idv,16*nelem,1);
-idv = idv*0; idv(T(:,11)==1) = 1; idv(solids)=0;    % right face standard
+idv = idv*0; idv(T(:,11)==1) = 1; idv(solids)=0;    % right face
 sMF = sMF + reshape(ME31(:)*idv,16*nelem,1);
-idv = idv*0; idv(T(:,11)==2) = 1; idv(solids)=0;    % right face corner
-sMF = sMF + reshape(ME32(:)*idv,16*nelem,1);
-idv = idv*0; idv(T(:,12)==1) = 1; idv(solids)=0;    % top face standard
+idv = idv*0; idv(T(:,12)==1) = 1; idv(solids)=0;    % top face
 sMF = sMF + reshape(ME41(:)*idv,16*nelem,1);
-idv = idv*0; idv(T(:,12)==2) = 1; idv(solids)=0;    % top face corner
-sMF = sMF + reshape(ME42(:)*idv,16*nelem,1);
 KF = sparse(iKF,jKF,sKF+sMF);
-LF = chol(KF,'lower');
+[LF, FLAG, PF] = chol(KF,'lower', 'matrix');
 % Transformation Matrix
 iTF = reshape(edofMatF,4*nelem,1);
 jTF = reshape(repmat(1:nelem,4,1)',4*nelem,1);
 sTF = repmat(1/4,4*nelem,1)*helem^2;
-TF = sparse(iTF,jTF,sTF);                           % actual integration of NdA
-TF0 = sparse(iTF, jTF, sTF/helem^2); 				% used to average nodal values
+TF = sparse(iTF,jTF,sTF);
+filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
 %% Initialize optimization
-maxloop = 300;
-volfrac = 0.16;
-x = volfrac*ones(nelem,1);
-x(T(:,5)==1) = volfrac*(1e-6);    % voids
-x(T(:,5)==2) = volfrac*(1-1e-6);  % solids
-beta = 1;
-njumps = 8;
-betamax = 16;
-dbeta = (betamax/beta)^(1/njumps); % factor for multiplying beta
-dweight = 1;
-weightmin = 1;
-changetol = 5e-2;
-jumpnext = 60;
-pace = min(20,maxloop/(njumps+1));
+minloop = 200;                                      % minimum number of loops
+pE = 2;                                             % SIMP penalty for linear stiffness
+pS = 2;                                             % SIMP penalty for stress stiffness
+pphysmax = 6;                                       % maximum penalization
+pN = 8;                                             % p-norm for eigenvalues
+pNmax = 128;
+beta = 6;                                           % thresholding steepness
+betamax = 6;
+weight = 1;                                         % weight for mnd
+dpphys = 0.25;                                      % change in penalty
+dpN = 4;
+dbeta = 2;
+changetol = 5e-2;                                   % max change in design
+pace = max(10,minloop/((pE - pphysmax)/dpphys));    % update pace
+jumpnext = 30;                                    % next jump loop
+
+% Target blf
+f = 2.0;
+lamstar = lamstar*f;
+mustar = 1/lamstar;
+
 loop = 0;
-Stats = zeros(maxloop,20);
+Stats = zeros(minloop,20);
 %% Initialize CA
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = 1;
-SOLVE_EIGS_EXACTLY = 1;
-SOLVE_ADJT_EXACTLY = 1;
+SOLVE_STAT_EXACTLY = 0;
+SOLVE_EIGS_EXACTLY = 0;
+SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
-NBASIS_STAT = 08;
+NBASIS_STAT = 04;
 NBASIS_EIGS = 04;
-NBASIS_ADJT = 10;
+NBASIS_ADJT = 04;
 % Orthogonalization type for eigenproblem
 CAOPTS.orthotype = 'current';
 CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
-CA_START = 20;
+CA_START = 10;
 CHOL_UPDATE_PACE = 5;
 
 % BC needed for msolveq and meigen
@@ -155,6 +161,9 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
+x = volfrac*ones(nelem,1);
+x(T(:,5)==1) = volfrac*(1e-6);    % voids
+x(T(:,5)==2) = volfrac*(1-1e-6);  % solids
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -169,28 +178,40 @@ c_MMA = 1000*ones(m,1);     % column vector with the constants c_i in the terms 
 d     = ones(m,1);          % column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
 fval = ones(m,1);           % initial constraint values
 
-% Compute density field
-xTilde = (TF0'*(LF'\(LF\(TF*x(:)))));
+% Compute initial density field
+xTilde = filter(x);
 xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
     (tanh(beta*0.5)+tanh(beta*(1-0.5)));
 %% Start iteration
-while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1e-3)
+while (...
+        ((loop < jumpnext || CONTINUATION_ONGOING) ...
+        || pE < pphysmax ...
+        || change_phys > 5e-2 ...
+        )...
+        || fval(1,1) > 1e-3)
     %% Continuation
+    CONTINUATION_ONGOING = ...
+        pE < pphysmax...
+        || pN < pNmax ...
+        || beta < betamax;
     CONTINUATION_UPDATE = ...
-        loop >= jumpnext && ...
-        change_phys <= changetol;
+        CONTINUATION_ONGOING ...
+        && loop >= jumpnext;
     if CONTINUATION_UPDATE
-        if beta == betamax
-            weight = max(weight*dweight,weightmin);
+        jumpnext = loop + pace;
+        pE = min(pphysmax, pE + dpphys);
+        pS = min(pphysmax, pS + dpphys);
+        if pE == pphysmax
+            pN = min(pNmax, pN*dpN);
+            beta = min(betamax, beta*dbeta);
         end
-        beta = min(beta*dbeta,betamax);
-        jumpnext = jumpnext + pace;
     end
     loop = loop + 1;
     %% Conditions for CA solve
     SOLVE_EXACTLY = ...
         loop < CA_START ...
         || ~mod(loop, CHOL_UPDATE_PACE) ...
+        || change_phys > 15e-2 ...
         || CONTINUATION_UPDATE;
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
@@ -199,7 +220,7 @@ while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1
     if SOLVE_EXACTLY || SOLVE_STAT_EXACTLY
         % SOLVE STATICS WITH CHOLESKY FACTORIZATION
         [R, FLAG, P] = chol(K(freedofs, freedofs), 'matrix');
-        [U, ~, ~] = msolveq(K, F, bc, R, P);
+        U = msolveq(K, F, bc, R, P);
         % Update 'old' quantities
         Rold = R;
         Pold = P;
@@ -234,8 +255,8 @@ while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1
         sG(l1:l2) = Emax*xPhys(el,1)^pS*helem^2*BNLTtauBNL(:);
         dsGdx(l1:l2) = Emax*pS*xPhys(el,1)^(pS-1)*helem^2*BNLTtauBNL(:);
     end
-    %% Solve eigenvalue problem
     KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
+    %% Solve eigenvalue problem
     % COMPUTE EIGS
     if SOLVE_EXACTLY || SOLVE_EIGS_EXACTLY
         % SOLVE EIGS WITH CHOLESKY FACTORIZATION
@@ -300,11 +321,12 @@ while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1
     else
         % SOLVE ADJOINTS WITH CA
         for k = 1:nevals
+            NBK = NBASIS_ADJT*(k <= 2) + 2*(k > 2);
             ADJsol(:, k) = msolveq(K, ADJload(:, k), bc, ...
-                Rold, Pold, Kold, NBASIS_ADJT);
+                Rold, Pold, Kold, NBK);
         end
     end
-    
+
     dmu2 = 0*dmu1;
     for j = 1:nevals
         adjsol = ADJsol(:,j);
@@ -318,41 +340,20 @@ while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1
     %% Chain rule for projection and filter
     dxPhys = (1 - (tanh(beta*(xTilde-0.5))).^2)*beta / ...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
-    dv =                            dv.*dxPhys;
-    dc =                            dc.*dxPhys;
-    dmu_max_app =                   dmu_max_app.*dxPhys;
-    dmnd =                          dmnd.*dxPhys;
-    dv =                            TF0'*(LF'\(LF\(TF*dv)));
-    dc =                            TF0'*(LF'\(LF\(TF*dc)));
-    dmu_max_app =                   TF0'*(LF'\(LF\(TF*dmu_max_app)));
-    dmnd =                          TF0'*(LF'\(LF\(TF*dmnd)));
+    dv =            filter(dv.*dxPhys);
+    dc =            filter(dc.*dxPhys);
+    dmu_max_app =   filter(dmu_max_app.*dxPhys);
+    dmnd =          filter(dmnd.*dxPhys);
     %% Draw design and stress
-%     figure(1);
+    %     figure(1);
     clf;
     v_img = xPhys;
     top_img = sparse(i_img,j_img,v_img);
-    subplot(3,1,1);
     imagesc(top_img);
     axis equal;
     axis tight;
     axis off;
     title('xPhys');
-    v_img = dmu_max_app;
-    top_img = sparse(i_img,j_img,v_img);
-    subplot(3,1,2);
-    imagesc(top_img);
-    axis equal;
-    axis tight;
-    axis off;
-    title('d{\mu}_{max}');
-    v_img = dc;
-    top_img = sparse(i_img,j_img,v_img);
-    subplot(3,1,3);
-    imagesc(top_img);
-    axis equal;
-    axis tight;
-    axis off;
-    title('d{c}');
     drawnow;
     %% MMA
     xval  = x;
@@ -402,32 +403,25 @@ while ((loop < maxloop || beta < betamax || weight > weightmin) || fval(1,1) > 1
     xold2    = xold1;
     xold1    = xval;
 
-    xTildenew = (TF0'*(LF'\(LF\(TF*xnew))));
+    xTildenew = filter(xnew);
     xPhysnew = (tanh(beta*0.5)+tanh(beta*(xTildenew-0.5)))/...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
     change      = max(abs(xnew-xval));
     change_phys = max(abs(xPhysnew - xPhys));
-
 
     x = xnew;
     xTilde = xTildenew;
     xPhys = xPhysnew;
 
     %% Print results
-    SOLVE_EXACTLY_VEC = [...
-        SOLVE_STAT_EXACTLY || SOLVE_EXACTLY...
-        SOLVE_EIGS_EXACTLY || SOLVE_EXACTLY...
-        SOLVE_ADJT_EXACTLY || SOLVE_EXACTLY];
+    sev = bitor([SOLVE_STAT_EXACTLY, SOLVE_EIGS_EXACTLY, SOLVE_ADJT_EXACTLY], SOLVE_EXACTLY);
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
-        'CH: %5.3f CHPHS: %5.3f BETAHS: %6.3f WEIGHT: %4.3f', ...
+        'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i ', ...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
-        loop,f0val,fval',change,change_phys,beta,weight,SOLVE_EXACTLY_VEC(:));
+        loop,f0val,fval',change,change_phys,pE, pN, beta,sev(:));
     %% Save data
     Stats(loop,1:1+m+1+nevals+1) = [f0val fval' beta lambda' weight];
 end
 runtime = toc;
 save(filename);
-
-
-

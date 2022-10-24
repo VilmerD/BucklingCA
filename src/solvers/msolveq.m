@@ -1,4 +1,4 @@
-function [x, b, varargout] = msolveq(A, b, bc, Rold, Aold, s)
+function [x, b, varargout] = msolveq(A, b, bc, Rold, Pold, Aold, s)
 % [x, b, R] = MSOLVEQ(A, b, bc) solves the linear system of equations 
 % A*x = b with boundary conditions bc. Q are the reaction forces and R is
 % the cholesky factorization of the free part of K.
@@ -31,18 +31,19 @@ xp = bc(:, 2);
 bf = b(nf) - A(nf, np)*xp;
 
 % Solving free system
-if nargin <= 4
-    % Exactly
-    if nargin < 4
-        Rcurr = chol(Aff);
+if nargin <= 5
+    % Solve the problem using cholesky factorization
+    if nargin < 5
+        [Rcurr, ~, Pcurr] = chol(Aff, 'matrix');
     else
         Rcurr = Rold;
+        Pcurr = Pold;
     end
-    xf = Rcurr\(Rcurr'\bf);
-    varargout = {Rcurr};
+    xf = Pcurr*(Rcurr\(Rcurr'\(Pcurr'*bf)));
+    varargout = {Rcurr, Pcurr};
 else
     % Using CA
-    [V, U, T, R] = CASBON(Aff, bf, Rold, Aold(nf, nf), s);
+    [V, U, T, R] = CASBON(Aff, bf, Rold, Pold, Aold(nf, nf), s);
     xf = V*(V'*bf);
     varargout = {U, T, R, V};
 end

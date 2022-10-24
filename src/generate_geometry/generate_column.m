@@ -69,10 +69,10 @@ for e = 1:nelem
     % 2 = xi_corner (Dirichlet-like)
     % Default is Neumann [left bottom right top]
     if (x_cent<helem); T(e,9) = 1; end % left face
-    if (x_cent<helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,9) = 0; end % left face, near support
+    if (x_cent<helem && abs(y_cent-sizey/2)<l_load*2/2); T(e,9) = 0; end % left face, near support
     if (y_cent<helem); T(e,10) = 1; end % bottom face
     if (x_cent>sizex-helem); T(e,11) = 1; end % right face
-    if (x_cent>sizex-helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,11) = 0; end % right face, near load
+    if (x_cent>sizex-helem && abs(y_cent-sizey/2)<l_load*2/2); T(e,11) = 0; end % right face, near load
     if (y_cent>sizey-helem); T(e,12) = 1; end % top face  
 end
 % Plot elements
