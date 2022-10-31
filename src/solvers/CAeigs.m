@@ -18,7 +18,7 @@ function [X, L, d, V_INTR] = CAeigs(A, B, n, Rold, Pold, Bold, Xold, s, options)
 % orthogonalization.
 
 % Preprocess s
-if numel(s) == 1; s = s*ones(ne, 1); else; s = s(1:ne); end
+if numel(s) == 1; s = s*ones(n, 1); else; s = s(1:n); end
 
 X = zeros(size(A, 1), n);
 L = zeros(n, n);

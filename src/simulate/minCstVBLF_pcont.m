@@ -13,7 +13,7 @@ tic;
 % prtype =  'COMP';                       % Minimize compliance
 prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
-domain = 'twobar';                  % options are: 'column' 'spire' 'twobar'
+domain = 'column';                  % options are: 'column' 'spire' 'twobar'
 helem = 1.00;                          % element size (all elements are square)
 %% Optimization parameters
 nevals = 6;                         % number of eigenvalues to consider
@@ -115,20 +115,20 @@ TF = sparse(iTF,jTF,sTF);
 filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
 %% Initialize optimization
 minloop = 200;                                      % minimum number of loops
-pE = 2;                                             % SIMP penalty for linear stiffness
-pS = 2;                                             % SIMP penalty for stress stiffness
-pphysmax = 6;                                       % maximum penalization
-pN = 8;                                             % p-norm for eigenvalues
-pNmax = 128;
-beta = 6;                                           % thresholding steepness
-betamax = 6;
+pE = 3;                                             % SIMP penalty for linear stiffness
+pS = 3;                                             % SIMP penalty for stress stiffness
+pphysmax = 3;                                       % maximum penalization
+pN = 16;                                            % p-norm for eigenvalues
+pNmax = 064;
+beta = 1;                                           % thresholding steepness
+betamax = 8;
 weight = 1;                                         % weight for mnd
 dpphys = 0.25;                                      % change in penalty
 dpN = 4;
 dbeta = 2;
 changetol = 5e-2;                                   % max change in design
-pace = max(10,minloop/((pE - pphysmax)/dpphys));    % update pace
-jumpnext = 30;                                    % next jump loop
+pace = 20;                                          % update pace
+jumpnext = 50;                                      % next jump loop
 
 % Target blf
 f = 2.0;
@@ -151,8 +151,8 @@ NBASIS_ADJT = 04;
 CAOPTS.orthotype = 'current';
 CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
-CA_START = 10;
-CHOL_UPDATE_PACE = 5;
+CA_START = inf;
+CHOL_UPDATE_PACE = 1;
 
 % BC needed for msolveq and meigen
 bc = (1:ndof)';
@@ -201,7 +201,7 @@ while (...
         jumpnext = loop + pace;
         pE = min(pphysmax, pE + dpphys);
         pS = min(pphysmax, pS + dpphys);
-        if pE == pphysmax
+        if pE >= pphysmax/2
             pN = min(pNmax, pN*dpN);
             beta = min(betamax, beta*dbeta);
         end
@@ -417,9 +417,11 @@ while (...
     sev = bitor([SOLVE_STAT_EXACTLY, SOLVE_EIGS_EXACTLY, SOLVE_ADJT_EXACTLY], SOLVE_EXACTLY);
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
+        'approxBLF: %+7.3f actualBLF: %+7.3f', ...
         'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i ', ...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
-        loop,f0val,fval',change,change_phys,pE, pN, beta,sev(:));
+        loop,f0val,fval',lambda_min_app,lambda_min_acc,...
+        change,change_phys,pE, pN, beta,sev(:));
     %% Save data
     Stats(loop,1:1+m+1+nevals+1) = [f0val fval' beta lambda' weight];
 end

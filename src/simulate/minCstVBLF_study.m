@@ -26,7 +26,7 @@ if exist('helem', 'var') == 0
     helem = 1.00;                          % element size (all elements are square)
 end
 if exist('domain', 'var') == 0
-    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Optimization parameters
 nevals = 6;                         % number of eigenvalues to consider
@@ -52,7 +52,7 @@ switch domain
     case 'spire'
         sizex = 240;
         sizey = 120;
-        lamstar = 7.3;
+        lamstar = 5.4;
         volfrac = 0.35;     % volume fraction
         [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_spire(sizex,sizey,helem,false);
     case 'twobar'
@@ -136,16 +136,15 @@ minloop = 200;                                      % minimum number of loops
 pE = 2;                                             % SIMP penalty for linear stiffness
 pS = 2;                                             % SIMP penalty for stress stiffness
 pphysmax = 6;                                       % maximum penalization
+dpphys = 0.50;                                      % change in penalty
 
-pN = 8;                                             % p-norm for eigenvalues
-pNmax = 128;
+pN = 16;                                             % p-norm for eigenvalues
+pNmax = 64;
+dpN = 2;
 
 beta = 6;                                           % thresholding steepness
 betamax = 6;
-
-dpphys = 0.25;                                      % change in penalty
-dpN = 2;
-dbeta = 2;
+dbeta = 1;
 
 changetol = 5e-2;                                   % max change in design
 pace = max(10,minloop/((pE - pphysmax)/dpphys));    % update pace
@@ -166,9 +165,9 @@ SOLVE_EIGS_EXACTLY = 0;
 SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
 if ~exist('NBASIS_STAT', 'var')
-    NBASIS_STAT = 04;
-    NBASIS_EIGS = 04;
-    NBASIS_ADJT = 04;
+    NBASIS_STAT = 06;
+    NBASIS_EIGS = 03;
+    NBASIS_ADJT = 06;
 end
 % Orthogonalization type for eigenproblem
 CAOPTS.orthotype = 'current';
@@ -189,8 +188,8 @@ bc(:, 2) = 0;
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
 x = volfrac*ones(nelem,1);
-x(T(:,5)==1) = volfrac*(1e-6);    % voids
-x(T(:,5)==2) = volfrac*(1-1e-6);  % solids
+x(T(:,5)==1) = 1*(1e-6);    % voids
+x(T(:,5)==2) = 1*(1-1e-6);  % solids
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -301,7 +300,7 @@ while (...
         end
     else
         % SOLVE EIGS WITH CA
-        NB = [NBASIS_EIGS*ones(2, 1), 2*ones(nevals-2, 1)];
+        NB = [NBASIS_EIGS*ones(2, 1); 2*ones(nevals-2, 1)];
         [evecs, evals, eigdelt] = meigenSM(-KNL, K, bc, nevals, ...
             Rold, Pold, Kold, PHIold, NB, CAOPTS);
         PHI = evecs./sqrt(dot(evecs, K*evecs));
@@ -412,8 +411,8 @@ while (...
             if (loop==1)
                 scale = 100/comp;
             end
-            f0val = scale*weight*comp;
-            df0dx = scale*weight*dc;
+            f0val = scale*comp;
+            df0dx = scale*dc;
             fval(1,1) = v/volfrac - 1;
             dfdx(1,:) = dv/volfrac;
             fval(2,1) = mu_max_app/mustar - 1;
