@@ -17,6 +17,9 @@ function [X, L, d, V_INTR] = CAeigs(A, B, n, Rold, Pold, Bold, Xold, s, options)
 % If orthotype is NONE or otherwise, CA does not do basis
 % orthogonalization.
 
+% Preprocess s
+if numel(s) == 1; s = s*ones(ne, 1); else; s = s(1:ne); end
+
 X = zeros(size(A, 1), n);
 L = zeros(n, n);
 d = -1*ones(n, 1);
@@ -34,7 +37,7 @@ for k = 1:n
     end
     
     % Generate basis vectors
-    [Vk, Uk, Tk] = CAEEON(A, B, Rold, Pold, Bold, Xold(:, k), s, XO);
+    [Vk, Uk, Tk] = CAEEON(A, B, Rold, Pold, Bold, Xold(:, k), s(k), XO);
     
     % Compute reduced model
     A_RED = Vk'*A*Vk;

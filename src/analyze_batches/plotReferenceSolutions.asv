@@ -1,0 +1,14 @@
+%% Plotting designs of reference problem using exact analysis
+jobs = dir('processed_data/buckling_study_reference1/job*');
+
+for k = 1:3
+    results_file = fullfile(jobs(k).folder, 'results.mat');
+    load(results_file, 'xPhys', 'sizex', 'sizey', 'i_img', 'j_img');
+    plotDesignAndSave(xPhys, i_img, j_img);
+end
+
+function plotDesignAndSave(x, i_img, j_img)
+% Plots design x on i_img and j_img and saves figure
+fig = figure();
+ax = axes(fig)
+end

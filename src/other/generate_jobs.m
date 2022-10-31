@@ -27,7 +27,9 @@ while ~isempty(msg)
 end
 
 % Copy contents of scriptdir into the jobfarm directory
-copyfile(jobDir, fullfile(jobfarmParentdir, jobfarmDirname));
+copyfile(fullfile(jobDir, jobName), fullfile(jobfarmParentdir, jobfarmDirname));
+copyfile(fullfile(jobDir, 'master_script.sh'), fullfile(jobfarmParentdir, jobfarmDirname));
+copyfile(fullfile(jobDir, 'worker_script.sh'), fullfile(jobfarmParentdir, jobfarmDirname));
 
 % Make input files
 jobvariables = struct();
