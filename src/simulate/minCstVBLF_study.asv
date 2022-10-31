@@ -3,10 +3,7 @@
 % Single density field with eta=0.5
 % clear;
 % close all;
-if exist('SHOW_DESIGN', 'var') == 0
-    SHOW_DESIGN = 1;
-end
-if SHOW_DESIGN; fig = figure(1); end
+fig = figure(1);
 % commandwindow;
 % clc;
 load('input.mat')
@@ -31,8 +28,7 @@ end
 %% Optimization parameters
 nevals = 6;                         % number of eigenvalues to consider
 if exist('filename', 'var') == 0
-    nruns = numel(dir('processed_data'))-1;
-    filename = sprintf('processed_data/%s_trial%i.mat', domain, nruns);
+    filename = sprintf('processed_data/%s_trial%i.mat', domain, numel(dir('processed_data'))-1);
 end
 %% Material properties
 Emax = 2e5;
@@ -378,17 +374,15 @@ while (...
     dmu_max_app =   filter(dmu_max_app.*dxPhys);
     %% Draw design and stress
     %     figure(1);
-    if SHOW_DESIGN
-        clf;
-        v_img = xPhys;
-        top_img = sparse(i_img,j_img,v_img);
-        imagesc(top_img);
-        axis equal;
-        axis tight;
-        axis off;
-        title('xPhys');
-        drawnow;
-    end
+    clf;
+    v_img = xPhys;
+    top_img = sparse(i_img,j_img,v_img);
+    imagesc(top_img);
+    axis equal;
+    axis tight;
+    axis off;
+    title('xPhys');
+    drawnow;
     %% MMA
     xval  = x;
     switch prtype
@@ -422,7 +416,8 @@ while (...
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
         mmasub(m,n,loop,xval,max(xmin,xval-0.2),min(xmax,xval+0.2),xold1,xold2, ...
         f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
-    %% Update MMA Variables
+    
+    % Update MMA Variables
     xnew     = xmma;
     xold2    = xold1;
     xold1    = xval;
@@ -438,6 +433,7 @@ while (...
     x = xnew;
     xTilde = xTildenew;
     xPhys = xPhysnew;
+
     %% Print results
     SV = bitor([SOLVE_STAT_EXACTLY, SOLVE_EIGS_EXACTLY, SOLVE_ADJT_EXACTLY], SOLVE_EXACTLY);
     fprintf([...
