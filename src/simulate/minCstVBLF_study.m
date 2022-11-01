@@ -9,7 +9,9 @@ end
 if SHOW_DESIGN; fig = figure(1); end
 % commandwindow;
 % clc;
-load('input.mat')
+if ~isempty(whos('FILE', 'input.mat'))
+    load('input.mat')
+end
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
@@ -19,14 +21,14 @@ tsol = zeros(1, 3);
 %% Choose problem type
 % prtype = 'WEIGHTED';                    % Gradually adds weight to x'*(1-x) to promote discrete design
 % prtype = 'BLF';                         % Maximize the buckling load factor
-% prtype =  'COMP';                       % Minimize compliance
-prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
+prtype =  'COMP';                       % Minimize compliance
+% prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
 if exist('helem', 'var') == 0
     helem = 1.00;                          % element size (all elements are square)
 end
 if exist('domain', 'var') == 0
-    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Optimization parameters
 nevals = 6;                         % number of eigenvalues to consider
@@ -46,21 +48,21 @@ switch domain
     case 'column'
         sizex = 400;
         sizey = 080;
-        lamstar = 7.0;
+        lamstar = 8.32;
         volfrac = 0.50;     % volume fraction
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_column(sizex,sizey,helem,false);
+        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_column(sizex,sizey,helem,0);
     case 'spire'
         sizex = 240;
         sizey = 120;
-        lamstar = 5.4;
+        lamstar = 6.16;
         volfrac = 0.35;     % volume fraction
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_spire(sizex,sizey,helem,false);
+        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_spire(sizex,sizey,helem,0);
     case 'twobar'
         sizex = 120;
         sizey = 280;
-        lamstar = 8.0;
+        lamstar = 9.01;
         volfrac = 0.20;
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,helem,false);
+        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,helem,1);
 end
 rmin = 0.05*min(sizex, sizey); % filter radius (for convolution density filter)
 fig.Position(3:4) = [sizex*1.10 sizey*1*1.20]/sizex*400;
@@ -136,22 +138,24 @@ minloop = 200;                                      % minimum number of loops
 pE = 2;                                             % SIMP penalty for linear stiffness
 pS = 2;                                             % SIMP penalty for stress stiffness
 pphysmax = 6;                                       % maximum penalization
-dpphys = 0.50;                                      % change in penalty
+dpphys = 0.25;                                      % change in penalty
 
-pN = 16;                                             % p-norm for eigenvalues
+pN = 8;                                             % p-norm for eigenvalues
 pNmax = 64;
 dpN = 2;
 
 beta = 6;                                           % thresholding steepness
-betamax = 6;
-dbeta = 1;
+betamax = 20;
+dbeta = 2;
 
 changetol = 5e-2;                                   % max change in design
-pace = max(10,minloop/((pE - pphysmax)/dpphys));    % update pace
+pace = max(8,minloop/((pE - pphysmax)/dpphys));    % update pace
 jumpnext = 30;                                      % next jump loop
 
 % Target blf
-f = 2.0;
+if exist('f', 'var') == 0
+    f = 2.0;
+end
 lamstar = lamstar*f;
 mustar = 1/lamstar;
 
@@ -160,9 +164,9 @@ Stats = zeros(minloop,1+2+nevals+3+3+2);
 %% Initialize CA
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = 0;
-SOLVE_EIGS_EXACTLY = 0;
-SOLVE_ADJT_EXACTLY = 0;
+SOLVE_STAT_EXACTLY = 1;
+SOLVE_EIGS_EXACTLY = 1;
+SOLVE_ADJT_EXACTLY = 1;
 % Number of basis vectors
 if ~exist('NBASIS_STAT', 'var')
     NBASIS_STAT = 06;
@@ -187,7 +191,7 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
-x = volfrac*ones(nelem,1);
+x = 1*ones(nelem,1);
 x(T(:,5)==1) = 1*(1e-6);    % voids
 x(T(:,5)==2) = 1*(1-1e-6);  % solids
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
@@ -225,12 +229,12 @@ while (...
         && loop >= jumpnext;
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
-        pE = min(pphysmax, pE + dpphys);
-        pS = min(pphysmax, pS + dpphys);
         if pE == pphysmax
             pN = min(pNmax, pN*dpN);
-            beta = min(betamax, beta*dbeta);
+            beta = min(betamax, beta+dbeta);
         end
+        pE = min(pphysmax, pE + dpphys);
+        pS = min(pphysmax, pS + dpphys);
     end
     loop = loop + 1;
     %% Conditions for CA solve

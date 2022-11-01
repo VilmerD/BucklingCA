@@ -4,9 +4,11 @@
 % row,col = for displaying design using imagesc (as a matrix)
 function [X,T,row,col,solids,voids,F,freedofs] = generate_column(sizex,sizey,helem,doplot)
 %% Define grid parameters 
-dx = helem;             % element size in x-direction
-dy = helem;             % element size in y-direction
-l_load = dx*4;            % distribution length for point load 
+dx = helem;                     % element size in x-direction
+dy = helem;                     % element size in y-direction
+l_load = 0.04*sizey;            % distribution length for point load
+l_supp = l_load;
+l_neu = l_load*2;
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
@@ -17,14 +19,6 @@ xynodeout = intersect(xnodeout,ynodeout);
 nodelist_clean = nodelist;
 nodelist_clean(xynodeout,:) = [];
 X = nodelist_clean; % For output
-% Plot nodes as points
-if (doplot)
-    figure(1);
-    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
-    hold on;
-    axis equal
-    axis tight
-end
 %% Create element grid for FEA and optimization
 [Xelem,Yelem] = meshgrid(dx/2:dx:sizex-dx/2,dy/2:dy:sizey-dy/2);
 elemlist(:,1) = Xelem(:);
@@ -61,82 +55,19 @@ for e = 1:nelem
     % Assign voids
     % No voids in the current representation of the column
     % Assign solids (for loaded and supported regions)
-%     if (x_cent>sizex-helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,5:6) = [2 0]; end
+%   if (x_cent>sizex-helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,5:6) = [2 0]; end
 % 	if (x_cent<helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,5:6) = [2 0]; end
     % Assign non-Neumann borders (for augmented PDE filter)
     % 0 = Neumann (supports, load)
     % 1 = Robin BCs with l_s=l_o (free faces)
     % 2 = xi_corner (Dirichlet-like)
     % Default is Neumann [left bottom right top]
-    if (x_cent<helem); T(e,9) = 1; end % left face
-    if (x_cent<helem && abs(y_cent-sizey/2)<l_load*2/2); T(e,9) = 0; end % left face, near support
-    if (y_cent<helem); T(e,10) = 1; end % bottom face
-    if (x_cent>sizex-helem); T(e,11) = 1; end % right face
-    if (x_cent>sizex-helem && abs(y_cent-sizey/2)<l_load*2/2); T(e,11) = 0; end % right face, near load
-    if (y_cent>sizey-helem); T(e,12) = 1; end % top face  
-end
-% Plot elements
-if (doplot)
-    figure(2);
-    hold on;
-    axis equal
-    axis tight
-    for e = 1:nelem
-        if (T(e,5) == 0) % Regular element
-            plot(T(e,7),T(e,8),'ro'); 
-        end
-        if (T(e,5) == 2) % Solid element
-            plot(T(e,7),T(e,8),'k*'); 
-        end
-        if (T(e,5) == 1) % Void element
-            plot(T(e,7),T(e,8),'m+'); 
-        end
-    end
-end
-% Plot boundary elements for filter BCs
-if (doplot)
-    figure(3);
-    hold on;
-    axis equal
-    axis tight
-    for e = 1:nelem
-        if (T(e,9) == 0) 
-            plot(T(e,7),T(e,8),'m+'); 
-        end
-        if (T(e,9) == 1) 
-            plot(T(e,7),T(e,8),'ro'); 
-        end
-        if (T(e,9) == 2) 
-            plot(T(e,7),T(e,8),'k*'); 
-        end
-        if (T(e,10) == 0) 
-            plot(T(e,7),T(e,8),'m+'); 
-        end
-        if (T(e,10) == 1) 
-            plot(T(e,7),T(e,8),'ro'); 
-        end
-        if (T(e,10) == 2) 
-            plot(T(e,7),T(e,8),'k*'); 
-        end
-        if (T(e,11) == 0) 
-            plot(T(e,7),T(e,8),'m+'); 
-        end
-        if (T(e,11) == 1) 
-            plot(T(e,7),T(e,8),'ro'); 
-        end
-        if (T(e,11) == 2) 
-            plot(T(e,7),T(e,8),'k*'); 
-        end
-        if (T(e,12) == 0) 
-            plot(T(e,7),T(e,8),'m+'); 
-        end
-        if (T(e,12) == 1) 
-            plot(T(e,7),T(e,8),'ro'); 
-        end
-        if (T(e,12) == 2) 
-            plot(T(e,7),T(e,8),'k*'); 
-        end
-    end
+    if (x_cent-dx/2<100*eps);          T(e,09) = 1; end    % left face
+    if (y_cent-dy/2<100*eps);          T(e,10) = 1; end    % bottom face
+    if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
+    if (y_cent+dy/2-sizey>-100*eps);   T(e,12) = 1; end    % top face
+    if (abs(x_cent-dx/2 - 0)     < 100*eps  && abs(y_cent-sizey/2)-l_neu<100*eps); T(e,09) = 0; end % left face, near support
+    if (abs(x_cent+dx/2 - sizex) < 100*eps  && abs(y_cent-sizey/2)-l_neu<100*eps); T(e,11) = 0; end % right face, near load
 end
 %% Create matrix representation of topology
 xmin = dx/2; 
@@ -150,24 +81,69 @@ for e = 1:nelem
 end
 %% Define loads and supports 
 solids = find(T(:,5)==2);   % find solid elements
-voids = find(T(:,5)==1);   % find void elements
-% loadedelem = solids;
-% nloadedelem = size(loadedelem,1);
-loadnode1 = find(X(:,1)==sizex); % Find nodes with x=sizex
-loadnode2 = find(X(:,2)==sizey/2); % Find nodes with y=sizey/2
-loadnode = intersect(loadnode1,loadnode2);
-loadeddof = 2*loadnode-1;
-loadmag = -1e4;
+voids = find(T(:,5)==1);    % find void elements
+
+% Load at right end with x=sizex and y=sizey/2+-l_load
+loadednode = bitand(...
+    abs(X(:,1)-sizex)-0 <100*eps, ...
+    abs(X(:,2)-sizey/2)-l_supp <100*eps);
+loadednode = find(loadednode);
+loadeddof = 2*loadednode-1;               % Force only in y
+loadmag = -1e4/numel(loadednode);
 F = sparse(loadeddof,1,loadmag,2*size(nodelist_clean,1),1);
-% Supports
-[supnodes1,~] = find(X(:,1)==0); % Find nodes with x=0
-[supnodes2,~] = find(X(:,2)==sizey/2); % Find nodes with y=sizey/2
-supnodes = intersect(supnodes1,supnodes2);
-supdofs1 = [2*supnodes-1,2*supnodes];
-[supnodes1,~] = find(X(:,1)==sizex); % Find nodes with x=sizex
-[supnodes2,~] = find(X(:,2)==sizey/2); % Find nodes with y=sizey/2
-supnodes = intersect(supnodes1,supnodes2);
-supdofs2 = 2*supnodes;
+
+% Supports at left end with x=0 and y=sizey/2+-l_load
+supnodes1 = bitand(...
+    abs(X(:,1)-0)-0                <100*eps, ...
+    abs(X(:,2)-sizey/2)-l_supp     <100*eps);
+supnodes1 = find(supnodes1);
+supdofs1 = [2*supnodes1-1,2*supnodes1]; % Support in x and y
+% Supports at right end with x=sizex and y=sizey/2+-l_load
+supnodes2 = bitand(...
+    abs(X(:,1)-sizex)-0            <100*eps, ...
+    abs(X(:,2)-sizey/2)-l_supp     <100*eps);
+supnodes2 = find(supnodes2);
+supdofs2 = 2*supnodes2;                 % Support only y
 supdofs = union(supdofs1,supdofs2);
+
+% Free dofs
 alldofs = 1:2*size(nodelist_clean,1);
 freedofs = setdiff(alldofs,supdofs)';
+%% Plot nodes as points
+if (0)
+    figure(1);
+    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
+    hold on;
+    axis equal
+    axis tight
+end
+% Plot elements
+if (0)
+    figure(2);
+    hold on;
+    axis equal
+    axis tight
+    % Regular element
+    eRegular = T(e, 5) == 0;
+    plot(T(eRegular, 7), T(eRegular, 8), 'ro');
+    % Void element
+    eVoid = T(e, 5) == 1;
+    plot(T(eVoid, 7), T(eVoid, 8), 'm+');
+    % Solid element
+    eSolid = T(e, 5) == 2;
+    plot(T(eSolid, 7), T(eSolid, 8), 'k*');
+end
+% Plot boundary elements for filter BCs
+if (doplot)
+    figure(3);
+    hold on;
+    axis equal
+    axis tight
+    eNeu = logical(sum(T(:, 9:12)==0, 2));
+    plot(T(eNeu, 7), T(eNeu, 8), 'm+');
+    eRob = logical(sum(T(:, 9:12)==1, 2));
+    plot(T(eRob, 7), T(eRob, 8), 'ro');
+    eDir = logical(sum(T(:, 9:12)==2, 2));
+    plot(T(eDir, 7), T(eDir, 8), 'k*');
+end
+end
