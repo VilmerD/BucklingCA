@@ -5,7 +5,6 @@
 % close all;
 % commandwindow;
 % clc;
-% load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
@@ -13,24 +12,14 @@ addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
 tsol = zeros(1, 3);
 %% Choose problem type
-% prtype = 'WEIGHTED';                    % Gradually adds weight to x'*(1-x) to promote discrete design
-% prtype = 'BLF';                         % Maximize the buckling load factor
-% prtype =  'COMP';                       % Minimize compliance
-prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
+prtype =  'COMP';                       % Minimize compliance
 %% Domain size and discretization
-% element size (all elements are square)
 if exist('helem', 'var') == 0
-    helem = 0.50; 
+    helem = 0.50;                          % element size (all elements are square)
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
     domain = 'column';                    % options are: 'column' 'spire' 'twobar'
-end
-%% Optimization parameters
-nevals = 6;                         % number of eigenvalues to consider
-if exist('filename', 'var') == 0
-    nruns = numel(dir('processed_data'))-1;
-    filename = sprintf('processed_data/%s_trial%i.mat', domain, nruns);
 end
 %% Material properties
 Emax = 2e5;
@@ -40,22 +29,76 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-ifile = sprintf('%s.mat', domain);
-load(fullfile('data/compliance_reference', ifile), ...
-    'sizex', 'sizey', 'volfrac', 'rmin', 'x', 'lambda');
-lamstar = lambda(1);
+switch lower(domain)
+    case 'column'
+        sizex = 240;
+        sizey = 120;
+        volfrac = 0.25;
+    case 'spire'
+        sizex = 240;
+        sizey = 120;
+        volfrac = 0.35;
+    case 'twobar'
+        sizex = 120;
+        sizey = 280;
+        volfrac = 0.20;
+end
 genfun = str2func(sprintf('generate_%s', domain));
-[X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,0);
+[X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,1);
+%% Filter
+rmin = 6; % filter radius (for convolution density filter)
+%% Initialize optimization
+minloop = 200;                                      % minimum number of loops
+
+pE = 3;                                             % SIMP penalty for linear stiffness
+pS = 3;                                             % SIMP penalty for stress stiffness
+pphysmax = 3;                                       % maximum penalization
+dpphys = 0;                                      % change in penalty
+
+pN = 32;                                             % p-norm for eigenvalues
+pNmax = 32;
+dpN = 2;
+
+beta = 6;                                           % thresholding steepness
+betamax = 20;
+dbeta = 2;
+
+changetol = 5e-2;                                   % max change in design
+pace = max(8,minloop/((pE - pphysmax)/dpphys));    % update pace
+jumpnext = 30;                                      % next jump loop
+
+loop = 0;
+Stats = zeros(minloop,1+2+3+3+2);
+%% Initialize CA
+% Booleans controlling whether or not to use CA for
+% the individual problems
+SOLVE_STAT_EXACTLY = 1;
+SOLVE_EIGS_EXACTLY = 1;
+SOLVE_ADJT_EXACTLY = 1;
+% Number of basis vectors
+if ~exist('NBASIS_STAT', 'var')
+    NBASIS_STAT = 06;
+    NBASIS_EIGS = 03;
+    NBASIS_ADJT = 06;
+end
+% Orthogonalization type for eigenproblem
+CAOPTS.orthotype = 'current';
+CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
+% When CA should be started, and how often to factorize
+if ~exist('CA_START', 'var')
+    CA_START = 10;
+end
+if ~exist('CHOL_UPDATE_PACE', 'var')
+    CHOL_UPDATE_PACE = 5;
+end
 %% Figure
-if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
+if exist('SHOW_DESIGN', 'var') == 0
     SHOW_DESIGN = 1;
-    fig = figure('MenuBar', 'none');
-    fig.Position(3:4) = [sizex sizey*3]/helem;
-    for k = 1:3
-        ax(k) = axes(fig, 'Position', [0, (k-1)/3, 1, k/3]);
-        hold(ax(k), 'on');
-        axis(ax(k), 'off');
-    end
+    fig = figure;
+    fig.Position(3:4) = [sizex sizey]/helem;
+    ax = axes(fig, 'Position', [0, 0, 1, 1]);
+    hold(ax, 'on');
+    axis(ax, 'off');
 end
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
@@ -74,7 +117,7 @@ edofMat(:,7:8) = [2*T(:,4)-1 2*T(:,4)];
 iK = reshape(kron(edofMat,ones(8,1))',64*nelem,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelem,1);
 % iF = reshape(edofMat',8*nelem,1);
-U = zeros(ndof,1); PHI = zeros(ndof,nevals);
+U = zeros(ndof,1);
 % For stress computations
 B = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 -1/2 0 1/2 0 1/2
@@ -123,58 +166,6 @@ sTF = repmat(1/4,4*nelem,1)*helem^2;
 TF = sparse(iTF,jTF,sTF);
 filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
 clear('iKF', 'jKF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
-%% Initialize optimization
-minloop = 200;                                      % minimum number of loops
-maxloop = 500;
-
-pE = 3;                                             % SIMP penalty for linear stiffness
-pS = 3;                                             % SIMP penalty for stress stiffness
-pphysmax = 6;                                       % maximum penalization
-dpphys = 0.25;                                      % change in penalty
-
-pN = 8;                                             % p-norm for eigenvalues
-pNmax = 32;
-dpN = 2;
-
-beta = 4;                                           % thresholding steepness
-betamax = 16;
-dbeta = 2;
-
-changetol = 5e-2;                                   % max change in design
-pace = max(5,minloop/((pE - pphysmax)/dpphys));    % update pace
-jumpnext = 20;                                      % next jump loop
-
-% Target blf
-if exist('f', 'var') == 0
-    f = 2.0;
-end
-lamstar = lamstar*f;
-mustar = 1/lamstar;
-
-loop = 0;
-Stats = zeros(minloop,1+2+nevals+3+3+2);
-%% Initialize CA
-% Booleans controlling whether or not to use CA for
-% the individual problems
-SOLVE_STAT_EXACTLY = 1;
-SOLVE_EIGS_EXACTLY = 1;
-SOLVE_ADJT_EXACTLY = 1;
-% Number of basis vectors
-if ~exist('NBASIS_STAT', 'var')
-    NBASIS_STAT = 06;
-    NBASIS_EIGS = 03;
-    NBASIS_ADJT = 06;
-end
-% Orthogonalization type for eigenproblem
-CAOPTS.orthotype = 'current';
-CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
-% When CA should be started, and how often to factorize
-if ~exist('CA_START', 'var')
-    CA_START = 10;
-end
-if ~exist('CHOL_UPDATE_PACE', 'var')
-    CHOL_UPDATE_PACE = 5;
-end
 
 % BC needed for msolveq and meigen
 bc = (1:ndof)';
@@ -183,10 +174,9 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
-% x = 0.6*ones(nelem, 1);
-% x(1:7:nelem) = 0.1;
-% x(T(:,5)==1) = 0.3*(1e-6);    % voids
-% x(T(:,5)==2) = 0.3*(1-1e-6);  % solids
+x = 0.6*ones(nelem,1);
+x(T(:,5)==1) = 1*(1e-6);    % voids
+x(T(:,5)==2) = 1*(1-1e-6);  % solids
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -211,7 +201,7 @@ while (...
         || pE < pphysmax ...
         || change_phys > 5e-2 ...
         )...
-        || fval(1,1) > 1e-3) && loop < maxloop
+        || fval(1,1) > 1e-3)
     %% Continuation
     CONTINUATION_ONGOING = ...
         pE < pphysmax...
@@ -223,11 +213,11 @@ while (...
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
         if pE == pphysmax
-            beta = min(betamax, beta*dbeta);
+            pN = min(pNmax, pN*dpN);
+            beta = min(betamax, beta+dbeta);
         end
-        pN = min(pNmax,     pN + dpN);
-        pE = min(pphysmax,  pE + dpphys);
-        pS = min(pphysmax,  pS + dpphys);
+        pE = min(pphysmax, pE + dpphys);
+        pS = min(pphysmax, pS + dpphys);
     end
     loop = loop + 1;
     %% Conditions for CA solve
@@ -262,164 +252,28 @@ while (...
     %% Volume and its sensitivity
     v = sum(xPhys)*helem^2/(sizey*sizex);
     dv = ones(size(xPhys))*helem^2/(sizey*sizex);
-    %% Compute geometric stiffness
-    EPS = U(edofMat)*B';                                % strain
-    SIG = EPS*D;                                        % stress for E=1
-    sG = 0*sK; dsGdx = sG;
-    for el = 1:nelem
-        tau = [SIG(el,1) SIG(el,3) 0 0;
-            SIG(el,3) SIG(el,2) 0 0 ;
-            0 0 SIG(el,1) SIG(el,3);
-            0 0 SIG(el,3) SIG(el,2)];
-        BNLTtau = BNL'*tau;
-        BNLTtauBNL = BNLTtau*BNL;
-        l1 = (el-1)*64+1; l2 = el*64;
-        sG(l1:l2) = Emax*xPhys(el,1)^pS*helem^2*BNLTtauBNL(:);
-        dsGdx(l1:l2) = Emax*pS*xPhys(el,1)^(pS-1)*helem^2*BNLTtauBNL(:);
-    end
-    KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
-    %% Solve eigenvalue problem
-    % COMPUTE EIGS
-    tstart_eigs = tic;
-    if SOLVE_EXACTLY || SOLVE_EIGS_EXACTLY
-        % SOLVE EIGS WITH CHOLESKY FACTORIZATION
-        if ~SOLVE_EXACTLY && ~SOLVE_STAT_EXACTLY
-            % If static problem was solved using CA
-            % we need a fresh factorization of K to solve adjoint exactly
-            [R, FLAG, P] = chol(K(freedofs, freedofs), 'matrix');
-        end
-        [evecs, evals] = meigenSM(-KNL, K, bc, nevals, R, P);
-        PHI = evecs./sqrt(dot(evecs, K*evecs));
-        PHIold = PHI;
-        % Update CA's orthovecs if 'old' option is used
-        if strcmpi(CAOPTS.orthotype, 'old')
-            CAOPTS.orthovecs = PHIold(freedofs, :);
-        end
-    else
-        % SOLVE EIGS WITH CA
-        NB = [NBASIS_EIGS*ones(2, 1); 2*ones(nevals-2, 1)];
-        [evecs, evals, eigdelt] = meigenSM(-KNL, K, bc, nevals, ...
-            Rold, Pold, Kold, PHIold, NB, CAOPTS);
-        PHI = evecs./sqrt(dot(evecs, K*evecs));
-    end
-    
-    mu = diag(evals);
-    mu_max_acc = max(mu);
-    mu_max_app = norm(mu,pN);
-    lambda = 1./mu;
-    lambda_min_acc = 1/mu_max_acc;
-    lambda_min_app = 1/mu_max_app;
-
-    tsol(loop, 2) = toc(tstart_eigs);
-    %% Sensitivities of buckling load factor
-    % Compute sensitivity term #1 -PHI'*(dGdx+mu*dKdx)*PHI
-    dmu1 = zeros(nelem,nevals);
-    for el = 1:nelem
-        l1 = (el-1)*64+1; l2 = el*64;
-        dsGe = reshape(dsGdx(l1:l2),8,8);
-        dsKe = pE*(Emax-Emin)*xPhys(el,1)^(pE-1)*KE;
-        dmu11 = sum(PHI(edofMat(el,:)',:).*(dsGe*PHI(edofMat(el,:)',:)));
-        dmu12 = mu'.*sum(PHI(edofMat(el,:)',:).*(dsKe*PHI(edofMat(el,:)',:)));
-        dmu1(el,:) = - (dmu11 + dmu12);
-    end
-    % Compute adjoint loads
-    ADJload = 0*PHI;
-    for el = 1:nelem
-        edof = edofMat(el,:);
-        GradPHI=BNL*PHI(edof,:);
-        BNLTdtauBNL = [GradPHI(1,:).^2+GradPHI(3,:).^2;
-            GradPHI(2,:).^2+GradPHI(4,:).^2;
-            2*(GradPHI(1,:).*GradPHI(2,:)+GradPHI(3,:).*GradPHI(4,:))];
-        vals = dSIGdu'*Emax*xPhys(el,1)^pS*helem^2*BNLTdtauBNL;
-        ADJload(edof,:) = ADJload(edof,:) - vals;
-    end
-    ADJsol = 0*ADJload;
-    % SOLVE ADJOINTS
-    tstart_adjt = tic;
-    if SOLVE_EXACTLY || SOLVE_ADJT_EXACTLY
-        % SOLVE ADJOINTS WITH CHOLESKY FACTORIZATION
-        if ~SOLVE_EXACTLY && ~SOLVE_STAT_EXACTLY && ~SOLVE_EIGS_EXACTLY
-            % If static problem and eigenproblem was solved using CA
-            % we need a fresh factorization of K to solve adjoint
-            [R, FLAG, P] = chol(K(freedofs, freedofs), 'matrix');
-        end
-        for k = 1:nevals
-            ADJsol(:, k) = msolveq(K, ADJload(:, k), bc, R, P);
-        end
-    else
-        % SOLVE ADJOINTS WITH CA
-        for k = 1:nevals
-            NBK = NBASIS_ADJT*(k <= 2) + 2*(k > 2);
-            ADJsol(:, k) = msolveq(K, ADJload(:, k), bc, ...
-                Rold, Pold, Kold, NBK);
-        end
-    end
-    tsol(loop, 3) = toc(tstart_adjt);
-
-    dmu2 = 0*dmu1;
-    for j = 1:nevals
-        adjsol = ADJsol(:,j);
-        vals = sum((adjsol(edofMat)*KE).*U(edofMat),2);
-        dmu2(:,j) = -pE*(Emax-Emin)*xPhys.^(pE-1).*vals;
-    end
-    dmu = dmu1 + dmu2;
-    term1 = 1/pN*(sum(mu.^pN))^(1/pN-1);
-    term2 = (mu.^(pN-1))'*dmu';
-    dmu_max_app = term1*pN*term2';
     %% Chain rule for projection and filter
     dxPhys = (1 - (tanh(beta*(xTilde-0.5))).^2)*beta / ...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
     dv =            filter(dv.*dxPhys);
     dc =            filter(dc.*dxPhys);
-    dmu_max_app =   filter(dmu_max_app.*dxPhys);
     %% Draw design and stress
     if SHOW_DESIGN
-        for k = 1:3
-            cla(ax(k), 'reset');
-            if k == 1
-                v_img = xPhys;
-            elseif k == 2
-                xx = dmu_max_app;
-                v_img = (xx(:, k+1)-min(xx(:, k+1)))/(max(xx(:, k+1))-min(xx(:, k+1)));
-            elseif k == 3
-                xx = dc;
-            end
-            imgk = sparse(i_img,j_img,v_img);
-            axes(ax(k));
-            imagesc(imgk);
-        end
+        cla(ax, 'reset');
+        v_img = xPhys;
+        top_img = sparse(i_img,j_img,v_img);
+        imagesc(ax, top_img);
         drawnow;
     end
     %% MMA
     xval  = x;
-    switch prtype
-        case 'COMP' % minCstV
-            if (loop==1)
-                scale = 10/comp;
-            end
-            f0val = scale*comp;
-            df0dx = scale*dc;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-        case 'BLF' % min gamma
-            if (loop==1)
-                scale = 10/mu_max_app;
-            end
-            f0val = scale*mu_max_app;
-            df0dx = scale*dmu_max_app;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-        case 'COMP_ST_BLF'
-            if (loop==1)
-                scale = 100/comp;
-            end
-            f0val = scale*comp;
-            df0dx = scale*dc;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-            fval(2,1) = mu_max_app/mustar - 1;
-            dfdx(2,:) = dmu_max_app/mustar;
+    if (loop==1)
+        scale = 10/comp;
     end
+    f0val = scale*comp;
+    df0dx = scale*dc;
+    fval(1,1) = v/volfrac - 1;
+    dfdx(1,:) = dv/volfrac;
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
         mmasub(m,n,loop,xval,max(xmin,xval-0.2),min(xmax,xval+0.2),xold1,xold2, ...
         f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
@@ -447,14 +301,48 @@ while (...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
         loop,f0val,fval',change,change_phys,pE, pN, beta,SV(:));
     %% Save data
-    Stats(loop,1:1+m+nevals+3+3+2) = [f0val fval' lambda' change, change_phys, pE pN beta SV];
+    Stats(loop,1:1+m+3+3+2) = [f0val fval' change, change_phys, pE pN beta SV];
 end
-runtime = toc(tstart);      
+runtime = toc(tstart);
+%% Compute BLF
+nevals = 6;
+% Compute geometric stiffness
+EPS = U(edofMat)*B';                                % strain
+SIG = EPS*D;                                        % stress for E=1
+sG = 0*sK; dsGdx = sG;
+for el = 1:nelem
+    tau = [SIG(el,1) SIG(el,3) 0 0;
+        SIG(el,3) SIG(el,2) 0 0 ;
+        0 0 SIG(el,1) SIG(el,3);
+        0 0 SIG(el,3) SIG(el,2)];
+    BNLTtau = BNL'*tau;
+    BNLTtauBNL = BNLTtau*BNL;
+    l1 = (el-1)*64+1; l2 = el*64;
+    sG(l1:l2) = Emax*xPhys(el,1)^pS*helem^2*BNLTtauBNL(:);
+    dsGdx(l1:l2) = Emax*pS*xPhys(el,1)^(pS-1)*helem^2*BNLTtauBNL(:);
+end
+KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
+% Solve eigenvalueproblem
+[evecs, evals] = meigenSM(-KNL, K, bc, nevals, R, P);
+mu = diag(evals);
+mu_max_acc = max(mu);
+mu_max_app = norm(mu,pN);
+lambda = 1./mu;
+lambda_min_acc = 1/mu_max_acc;
+lambda_min_app = 1/mu_max_app;
+%% Clear data before saving
+saveas(fig, 'design.png');
 clear(...
-    'T', 'dsGdx', 'iK', 'jK', 'sK', 'K', 'sG', 'KNL', ...
+    'fig', 'ax', ...
+    'dsGdx', 'iK', 'jK', 'sK', 'K', 'Kold', 'sG', 'KNL', ...
     'sK', 'KF', 'iKF', 'jKF', 'sKF', 'sMF', ...
     'R', 'Rold', 'P', 'Pold', 'PF', ...
     'LF', 'TF', 'PF', ...
-    'ADJsol', 'ADJload')
-save(filename);
-saveas(gcf, 'design.png');
+    'ADJsol', 'ADJload', 'evecs', ...
+    'edofMat', 'edofMatF', ...
+    'EPS', 'SIG', 'PHI', ...
+    'U')
+%% Save
+name = sprintf('%s.mat', domain);
+mfile = fullfile('data/compliance_reference', name);
+save(mfile);

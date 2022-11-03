@@ -3,15 +3,9 @@
 % Single density field with eta=0.5
 % clear;
 % close all;
-if exist('SHOW_DESIGN', 'var') == 0
-    SHOW_DESIGN = 1;
-end
-if SHOW_DESIGN; fig = figure(1); end
 % commandwindow;
 % clc;
-if ~isempty(whos('FILE', 'input.mat'))
-    load('input.mat')
-end
+% load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
@@ -21,11 +15,13 @@ tsol = zeros(1, 3);
 %% Choose problem type
 % prtype = 'WEIGHTED';                    % Gradually adds weight to x'*(1-x) to promote discrete design
 % prtype = 'BLF';                         % Maximize the buckling load factor
-prtype =  'COMP';                       % Minimize compliance
-% prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
+% prtype =  'COMP';                       % Minimize compliance
+prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
+% element size (all elements are square)
 if exist('helem', 'var') == 0
-    helem = 1.00;                          % element size (all elements are square)
+    helem = 0.50; 
+    helem = helem*1;
 end
 if exist('domain', 'var') == 0
     domain = 'column';                    % options are: 'column' 'spire' 'twobar'
@@ -44,28 +40,25 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-switch domain
-    case 'column'
-        sizex = 400;
-        sizey = 080;
-        lamstar = 8.32;
-        volfrac = 0.50;     % volume fraction
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_column(sizex,sizey,helem,0);
-    case 'spire'
-        sizex = 240;
-        sizey = 120;
-        lamstar = 6.16;
-        volfrac = 0.35;     % volume fraction
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_spire(sizex,sizey,helem,0);
-    case 'twobar'
-        sizex = 120;
-        sizey = 280;
-        lamstar = 9.01;
-        volfrac = 0.20;
-        [X,T,i_img,j_img,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,helem,1);
+ifile = sprintf('%s.mat', domain);
+load(fullfile('data/compliance_reference', ifile), ...
+    'sizex', 'sizey', 'volfrac', 'rmin', 'x', 'lambda');
+lamstar = lambda(1);
+genfun = str2func(sprintf('generate_%s', domain));
+[X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,0);
+%% Figure
+if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
+    SHOW_DESIGN = 1;
+    fig = figure('MenuBar', 'none', 'Units', 'points');
+    fig.Position(3:4) = [sizex sizey*3]/helem;
+    for k = 1:3
+        ax(k) = axes(fig, 'Units', 'points');
+        axis(ax(k), 'off');
+        axis(ax(k), 'image');
+        hold(ax(k), 'on');
+        ax(k).Position = [0, (k-1)*sizey, sizex, sizey]/helem;
+    end
 end
-rmin = 0.05*min(sizex, sizey); % filter radius (for convolution density filter)
-fig.Position(3:4) = [sizex*1.10 sizey*1*1.20]/sizex*400;
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -134,23 +127,24 @@ filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual
 clear('iKF', 'jKF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
 %% Initialize optimization
 minloop = 200;                                      % minimum number of loops
+maxloop = 500;
 
-pE = 2;                                             % SIMP penalty for linear stiffness
-pS = 2;                                             % SIMP penalty for stress stiffness
+pE = 3;                                             % SIMP penalty for linear stiffness
+pS = 3;                                             % SIMP penalty for stress stiffness
 pphysmax = 6;                                       % maximum penalization
 dpphys = 0.25;                                      % change in penalty
 
 pN = 8;                                             % p-norm for eigenvalues
-pNmax = 64;
+pNmax = 32;
 dpN = 2;
 
-beta = 6;                                           % thresholding steepness
-betamax = 20;
+beta = 4;                                           % thresholding steepness
+betamax = 16;
 dbeta = 2;
 
 changetol = 5e-2;                                   % max change in design
-pace = max(8,minloop/((pE - pphysmax)/dpphys));    % update pace
-jumpnext = 30;                                      % next jump loop
+pace = max(5,minloop/((pE - pphysmax)/dpphys));    % update pace
+jumpnext = 20;                                      % next jump loop
 
 % Target blf
 if exist('f', 'var') == 0
@@ -191,9 +185,11 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
-x = 1*ones(nelem,1);
-x(T(:,5)==1) = 1*(1e-6);    % voids
-x(T(:,5)==2) = 1*(1-1e-6);  % solids
+x = x;
+% x = 0.6*ones(nelem, 1);
+% x(1:7:nelem) = 0.1;
+% x(T(:,5)==1) = 0.3*(1e-6);    % voids
+% x(T(:,5)==2) = 0.3*(1-1e-6);  % solids
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -218,7 +214,7 @@ while (...
         || pE < pphysmax ...
         || change_phys > 5e-2 ...
         )...
-        || fval(1,1) > 1e-3)
+        || fval(1,1) > 1e-3) && loop < maxloop
     %% Continuation
     CONTINUATION_ONGOING = ...
         pE < pphysmax...
@@ -230,11 +226,11 @@ while (...
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
         if pE == pphysmax
-            pN = min(pNmax, pN*dpN);
-            beta = min(betamax, beta+dbeta);
+            beta = min(betamax, beta*dbeta);
         end
-        pE = min(pphysmax, pE + dpphys);
-        pS = min(pphysmax, pS + dpphys);
+        pN = min(pNmax,     pN + dpN);
+        pE = min(pphysmax,  pE + dpphys);
+        pS = min(pphysmax,  pS + dpphys);
     end
     loop = loop + 1;
     %% Conditions for CA solve
@@ -380,16 +376,21 @@ while (...
     dc =            filter(dc.*dxPhys);
     dmu_max_app =   filter(dmu_max_app.*dxPhys);
     %% Draw design and stress
-    %     figure(1);
     if SHOW_DESIGN
-        clf;
-        v_img = xPhys;
-        top_img = sparse(i_img,j_img,v_img);
-        imagesc(top_img);
-        axis equal;
-        axis tight;
-        axis off;
-        title('xPhys');
+        for k = 1:3
+            if k == 1
+                v_img = xPhys;
+            elseif k == 2
+                xx = dmu_max_app;
+                v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
+            elseif k == 3
+                xx = dc;
+                v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
+            end
+            imgk = sparse(i_img,j_img,v_img);
+            axes(ax(k));
+            imagesc(imgk);
+        end
         drawnow;
     end
     %% MMA
