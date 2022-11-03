@@ -13,9 +13,6 @@ addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
 tsol = zeros(1, 3);
 %% Choose problem type
-% prtype = 'WEIGHTED';                    % Gradually adds weight to x'*(1-x) to promote discrete design
-% prtype = 'BLF';                         % Maximize the buckling load factor
-% prtype =  'COMP';                       % Minimize compliance
 prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
 % element size (all elements are square)
@@ -46,17 +43,73 @@ load(fullfile('data/compliance_reference', ifile), ...
 lamstar = lambda(1);
 genfun = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,0);
+%% Initialize optimization
+minloop = 180;                                      % minimum number of loops
+maxloop = 400;
+
+pE = 2;                                             % SIMP penalty for linear stiffness
+pS = 2;                                             % SIMP penalty for stress stiffness
+pphysmax = 6;                                       % maximum penalization
+dpphys = 0.25;                                      % change in penalty
+
+pN = 8;                                             % p-norm for eigenvalues
+pNmax = 32;
+dpN = 2;
+
+beta = 6;                                           % thresholding steepness
+betamax = 6;
+dbeta = 1;
+
+changetol = 5e-2;                                           % max change in design
+jumpnext = 20;                                              % next jump loop
+pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace
+
+% Target blf
+if exist('f', 'var') == 0
+    f = 2.0;
+end
+lamstar = lamstar*f;
+mustar = 1/lamstar;
+
+loop = 0;
+Stats = zeros(minloop,1+2+nevals+3+3+2);
+%% Initialize CA
+% Booleans controlling whether or not to use CA for
+% the individual problems
+SOLVE_STAT_EXACTLY = 1;
+SOLVE_EIGS_EXACTLY = 1;
+SOLVE_ADJT_EXACTLY = 1;
+% Number of basis vectors
+if ~exist('NBASIS_STAT', 'var')
+    NBASIS_STAT = 06;
+    NBASIS_EIGS = 03;
+    NBASIS_ADJT = 06;
+end
+% Orthogonalization type for eigenproblem
+CAOPTS.orthotype = 'current';
+CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
+% When CA should be started, and how often to factorize
+if ~exist('CA_START', 'var')
+    CA_START = 10;
+end
+if ~exist('CHOL_UPDATE_PACE', 'var')
+    CHOL_UPDATE_PACE = 5;
+end
 %% Figure
+nimgx = 2;
+nimgy = 2;
 if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
     SHOW_DESIGN = 1;
     fig = figure('MenuBar', 'none', 'Units', 'points');
-    fig.Position(3:4) = [sizex sizey*3]/helem;
-    for k = 1:3
+    fig.Position(3:4) = [sizex*nimgy sizey*nimgy]/helem;
+    for k = 1:nimgx*nimgy
         ax(k) = axes(fig, 'Units', 'points');
         axis(ax(k), 'off');
         axis(ax(k), 'image');
         hold(ax(k), 'on');
-        ax(k).Position = [0, (k-1)*sizey, sizex, sizey]/helem;
+        x0 = (k - (mod(k-1, nimgy)+1))/nimgy*sizex;
+        y0 = (nimgy - (mod(k-1, 2)+1))*sizey;
+        ax(k).Position = [x0, y0, sizex, sizey]/helem;
     end
 end
 %% Prepare FEA (88-line style)
@@ -125,58 +178,6 @@ sTF = repmat(1/4,4*nelem,1)*helem^2;
 TF = sparse(iTF,jTF,sTF);
 filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
 clear('iKF', 'jKF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
-%% Initialize optimization
-minloop = 200;                                      % minimum number of loops
-maxloop = 500;
-
-pE = 3;                                             % SIMP penalty for linear stiffness
-pS = 3;                                             % SIMP penalty for stress stiffness
-pphysmax = 6;                                       % maximum penalization
-dpphys = 0.25;                                      % change in penalty
-
-pN = 8;                                             % p-norm for eigenvalues
-pNmax = 32;
-dpN = 2;
-
-beta = 4;                                           % thresholding steepness
-betamax = 16;
-dbeta = 2;
-
-changetol = 5e-2;                                   % max change in design
-pace = max(5,minloop/((pE - pphysmax)/dpphys));    % update pace
-jumpnext = 20;                                      % next jump loop
-
-% Target blf
-if exist('f', 'var') == 0
-    f = 2.0;
-end
-lamstar = lamstar*f;
-mustar = 1/lamstar;
-
-loop = 0;
-Stats = zeros(minloop,1+2+nevals+3+3+2);
-%% Initialize CA
-% Booleans controlling whether or not to use CA for
-% the individual problems
-SOLVE_STAT_EXACTLY = 1;
-SOLVE_EIGS_EXACTLY = 1;
-SOLVE_ADJT_EXACTLY = 1;
-% Number of basis vectors
-if ~exist('NBASIS_STAT', 'var')
-    NBASIS_STAT = 06;
-    NBASIS_EIGS = 03;
-    NBASIS_ADJT = 06;
-end
-% Orthogonalization type for eigenproblem
-CAOPTS.orthotype = 'current';
-CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
-% When CA should be started, and how often to factorize
-if ~exist('CA_START', 'var')
-    CA_START = 10;
-end
-if ~exist('CHOL_UPDATE_PACE', 'var')
-    CHOL_UPDATE_PACE = 5;
-end
 
 % BC needed for msolveq and meigen
 bc = (1:ndof)';
@@ -377,16 +378,17 @@ while (...
     dmu_max_app =   filter(dmu_max_app.*dxPhys);
     %% Draw design and stress
     if SHOW_DESIGN
-        for k = 1:3
+        for k = 1:nimgx*nimgy
             if k == 1
-                v_img = xPhys;
+                xx = xPhys;
             elseif k == 2
                 xx = dmu_max_app;
-                v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
-            elseif k == 3
-                xx = dc;
-                v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
+%             elseif k == 3
+%                 xx = dc;
+            else
+                xx = dmu(:, k-nimgy);
             end
+            v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
             imgk = sparse(i_img,j_img,v_img);
             axes(ax(k));
             imagesc(imgk);
@@ -446,18 +448,20 @@ while (...
     SV = bitor([SOLVE_STAT_EXACTLY, SOLVE_EIGS_EXACTLY, SOLVE_ADJT_EXACTLY], SOLVE_EXACTLY);
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
+        'BLF: ', repmat('%+10.3e ', 1, nevals), 'BLFAPP %+10.3e ', ...
         'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i ', ...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
-        loop,f0val,fval',change,change_phys,pE, pN, beta,SV(:));
+        loop,f0val,fval', lambda', lambda_min_app, change,change_phys,pE, pN, beta,SV(:));
     %% Save data
     Stats(loop,1:1+m+nevals+3+3+2) = [f0val fval' lambda' change, change_phys, pE pN beta SV];
 end
+saveas(gcf, 'design.png');
 runtime = toc(tstart);      
 clear(...
+    'fig', 'ax', ...
     'T', 'dsGdx', 'iK', 'jK', 'sK', 'K', 'sG', 'KNL', ...
     'sK', 'KF', 'iKF', 'jKF', 'sKF', 'sMF', ...
     'R', 'Rold', 'P', 'Pold', 'PF', ...
     'LF', 'TF', 'PF', ...
     'ADJsol', 'ADJload')
 save(filename);
-saveas(gcf, 'design.png');

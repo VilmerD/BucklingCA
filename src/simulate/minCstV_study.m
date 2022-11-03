@@ -19,7 +19,7 @@ if exist('helem', 'var') == 0
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
-    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Material properties
 Emax = 2e5;
@@ -46,7 +46,7 @@ end
 genfun = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,1);
 %% Filter
-rmin = 6; % filter radius (for convolution density filter)
+rmin = 3; % filter radius (for convolution density filter)
 %% Initialize optimization
 minloop = 200;                                      % minimum number of loops
 
@@ -60,12 +60,12 @@ pNmax = 32;
 dpN = 2;
 
 beta = 6;                                           % thresholding steepness
-betamax = 20;
-dbeta = 2;
+betamax = 6;
+dbeta = 1;
 
-changetol = 5e-2;                                   % max change in design
-pace = max(8,minloop/((pE - pphysmax)/dpphys));    % update pace
-jumpnext = 30;                                      % next jump loop
+changetol = 5e-2;                                           % max change in design
+jumpnext = 20;                                              % next jump loop
+pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace                                     % next jump loop
 
 loop = 0;
 Stats = zeros(minloop,1+2+3+3+2);
@@ -213,9 +213,9 @@ while (...
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
         if pE == pphysmax
-            pN = min(pNmax, pN*dpN);
-            beta = min(betamax, beta+dbeta);
+            beta = min(betamax, beta*dbeta);
         end
+        pN = min(pNmax, pN + dpN);
         pE = min(pphysmax, pE + dpphys);
         pS = min(pphysmax, pS + dpphys);
     end
@@ -323,7 +323,7 @@ for el = 1:nelem
 end
 KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
 % Solve eigenvalueproblem
-[evecs, evals] = meigenSM(-KNL, K, bc, nevals, R, P);
+[~, evals] = meigenSM(-KNL, K, bc, nevals, R, P);
 mu = diag(evals);
 mu_max_acc = max(mu);
 mu_max_app = norm(mu,pN);
@@ -345,4 +345,6 @@ clear(...
 %% Save
 name = sprintf('%s.mat', domain);
 mfile = fullfile('data/compliance_reference', name);
-save(mfile);
+dat = struct('sizex', sizex, 'sizey', sizey, 'volfrac', volfrac, 'rmin', rmin, ...
+    'lambda', lambda', 'x', x, 'xPhys', xPhys);
+save(mfile, '-struct', 'dat');
