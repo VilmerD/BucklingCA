@@ -6,7 +6,7 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-l_load = 0.00*sizey;            % distribution length for point load
+l_load = 0.01*sizey;            % distribution length for point load
 h_supp = 1.00*sizex;
 l_supp = 0.02*sizey;
 l_neu = l_load*2 + dy/2;

@@ -38,7 +38,7 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-ifile = sprintf('%sB.mat', domain);
+ifile = sprintf('%s.mat', domain);
 load(fullfile('data/compliance_reference', ifile), ...
     'sizex', 'sizey', 'volfrac', 'x', 'lambda');
 lamstar = lambda(1);

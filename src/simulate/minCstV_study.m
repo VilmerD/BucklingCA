@@ -20,7 +20,7 @@ if exist('helem', 'var') == 0
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
-    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Material properties
 Emax = 2e5;
@@ -317,7 +317,7 @@ U = msolveq(K, F, bc, R, P);
 % Compute geometric stiffness
 EPS = U(edofMat)*B';                                % strain
 SIG = EPS*D;                                        % stress for E=1
-sG = 0*sK; dsGdx = sG;
+sG = 0*sK;
 for el = 1:nelem
     tau = [SIG(el,1) SIG(el,3) 0 0;
         SIG(el,3) SIG(el,2) 0 0 ;
@@ -327,17 +327,12 @@ for el = 1:nelem
     BNLTtauBNL = BNLTtau*BNL;
     l1 = (el-1)*64+1; l2 = el*64;
     sG(l1:l2) = Emax*xPhys(el,1)^pS*helem^2*BNLTtauBNL(:);
-    dsGdx(l1:l2) = Emax*pS*xPhys(el,1)^(pS-1)*helem^2*BNLTtauBNL(:);
 end
 KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
 % Solve eigenvalueproblem
 [~, evals] = meigenSM(-KNL, K, bc, nevals, R, P);
 mu = diag(evals);
-mu_max_acc = max(mu);
-mu_max_app = norm(mu,pN);
 lambda = 1./mu;
-lambda_min_acc = 1/mu_max_acc;
-lambda_min_app = 1/mu_max_app;
 %% Save
 name = sprintf('%s.mat', domain);
 destin_dir = 'data/compliance_reference';
