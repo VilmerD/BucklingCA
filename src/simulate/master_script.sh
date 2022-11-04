@@ -2,8 +2,8 @@
 # requesting the number of nodes needed
 #SBATCH -A lu2022-2-24
 #SBATCH -N 1
-#SBATCH --tasks-per-node=20
-#SBATCH --mem-per-cpu=3100
+#SBATCH --tasks-per-node=9
+#SBATCH --mem-per-cpu=6200
 #
 # job time, change for what your job farm requires
 #SBATCH -t 12:00:00
@@ -15,7 +15,7 @@
 cat $0
 
 # set the number of jobs - change for your requirements
-export NB_of_jobs=1
+export NB_of_jobs=100
 
 # Loop over the job number
 

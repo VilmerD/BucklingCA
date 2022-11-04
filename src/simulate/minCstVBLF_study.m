@@ -5,7 +5,7 @@
 % close all;
 % commandwindow;
 % clc;
-% load('input.mat')
+load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
@@ -38,7 +38,7 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-ifile = sprintf('%sB.mat', domain);
+ifile = sprintf('%s.mat', domain);
 load(fullfile('data/compliance_reference', ifile), ...
     'sizex', 'sizey', 'volfrac', 'x', 'lambda');
 lamstar = lambda(1);
