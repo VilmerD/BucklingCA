@@ -6,9 +6,10 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-l_load = 0.02*sizey;            % distribution length for point load
-l_supp = 0.45*sizey;
-l_neu = l_load*2;
+l_load = 0.00*sizey;            % distribution length for point load
+h_supp = 1.00*sizex;
+l_supp = 0.02*sizey;
+l_neu = l_load*2 + dy/2;
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
@@ -66,9 +67,9 @@ for e = 1:nelem
     if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
     if (y_cent+dy/2-sizey>-100*eps);   T(e,12) = 1; end    % top face
     if (abs(x_cent-dx/2 - 0)     < 100*eps && ...
-            abs(y_cent-sizey/2)-sizey/2<100*eps); T(e,09) = 0; end % left face
+            abs(abs(y_cent+dy/2-sizey/2)-h_supp)-l_supp<100*eps); T(e,09) = 0; end  % left face
     if (abs(x_cent+dx/2 - sizex) < 100*eps && ...
-            abs(y_cent-sizey/2)-l_neu<100*eps);  T(e,11) = 0; end % right face, near load
+            abs(y_cent-sizey/2)-l_neu<100*eps);  T(e,11) = 0; end   % right face, near load
 end
 %% Create matrix representation of topology
 xmin = dx/2; 
@@ -90,7 +91,7 @@ loadednodes = bitand(...
     abs(X(:,2)-sizey/2)-l_load <100*eps);
 loadednodes = find(loadednodes);
 loadeddofs = 2*loadednodes;
-loadmag = -1e4/numel(loadeddofs);
+loadmag = 1e4/numel(loadeddofs);
 F = sparse(loadeddofs,1,loadmag,2*size(nodelist,1),1);
 
 % Supports
@@ -104,7 +105,7 @@ else
     % Supports at left end with x=0 and y=sizey/2+-l_supp
     supnodes = bitand(...
         abs(X(:,1)-0)- 0                <100*eps, ...
-        abs(abs(X(:,2)-sizey/2)-l_supp) <100*eps);
+        abs(abs(X(:,2)-sizey/2)-h_supp)-l_supp <100*eps);
     supnodes = find(supnodes);
     supdofs = [2*supnodes-1,2*supnodes];
 end

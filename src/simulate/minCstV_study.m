@@ -20,7 +20,7 @@ if exist('helem', 'var') == 0
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
-    domain = 'spire';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Material properties
 Emax = 2e5;
@@ -47,7 +47,7 @@ end
 genfun = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,1);
 %% Filter
-rmin = 3; % filter radius (for convolution density filter)
+rmin = 3.00; % filter radius (for convolution density filter)
 %% Initialize optimization
 minloop = 200;                                      % minimum number of loops
 
@@ -344,5 +344,5 @@ destin_dir = 'data/compliance_reference';
 mfile = fullfile(destin_dir, name);
 dat = struct('sizex', sizex, 'sizey', sizey, 'helem', helem, ...
     'volfrac', volfrac, 'rmin', rmin, ...
-    'xPhys', xPhys, 'lambda', lambda');
+    'xPhys', xPhys, 'x', x, 'lambda', lambda');
 save(mfile, '-struct', 'dat');

@@ -8,6 +8,7 @@
 % load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
+addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
@@ -21,7 +22,7 @@ if exist('helem', 'var') == 0
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
-    domain = 'column';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Optimization parameters
 nevals = 6;                         % number of eigenvalues to consider
@@ -37,12 +38,15 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-ifile = sprintf('%s.mat', domain);
+ifile = sprintf('%sB.mat', domain);
 load(fullfile('data/compliance_reference', ifile), ...
-    'sizex', 'sizey', 'volfrac', 'rmin', 'x', 'lambda');
+    'sizex', 'sizey', 'volfrac', 'x', 'lambda');
 lamstar = lambda(1);
 genfun = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,0);
+if exist('rmin', 'var') == 0
+    rmin = 3;
+end
 %% Initialize optimization
 minloop = 180;                                      % minimum number of loops
 maxloop = 400;
@@ -60,7 +64,8 @@ beta = 6;                                           % thresholding steepness
 betamax = 6;
 dbeta = 1;
 
-changetol = 5e-2;                                           % max change in design
+changetol       = 0.05;                                     % max change in design
+ca_changetol    = 0.500;
 jumpnext = 20;                                              % next jump loop
 pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace
 
@@ -95,21 +100,24 @@ end
 if ~exist('CHOL_UPDATE_PACE', 'var')
     CHOL_UPDATE_PACE = 5;
 end
-%% Figure
+%% Initialize figure
 nimgx = 2;
 nimgy = 2;
 if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
     SHOW_DESIGN = 1;
-    fig = figure('MenuBar', 'none', 'Units', 'points');
-    fig.Position(3:4) = [sizex*nimgy sizey*nimgy]/helem;
+    fig = figure(...
+        'MenuBar', 'none', ...
+        'Units', 'points', ...
+        'Position', [0, 0, sizex*nimgy, sizey*nimgy]);
     for k = 1:nimgx*nimgy
-        ax(k) = axes(fig, 'Units', 'points');
-        axis(ax(k), 'off');
-        axis(ax(k), 'image');
-        hold(ax(k), 'on');
         x0 = (k - (mod(k-1, nimgy)+1))/nimgy*sizex;
         y0 = (nimgy - (mod(k-1, 2)+1))*sizey;
-        ax(k).Position = [x0, y0, sizex, sizey]/helem;
+        ax(k) = axes(fig, ...
+            'Units', 'points', ...
+            'Position', [x0, y0, sizex, sizey]);          %#ok<SAGROW>
+        axis(ax(k), 'off');
+        axis(ax(k), 'image');
+        hold(ax(k), 'on');       
     end
 end
 %% Prepare FEA (88-line style)
@@ -129,7 +137,7 @@ edofMat(:,7:8) = [2*T(:,4)-1 2*T(:,4)];
 iK = reshape(kron(edofMat,ones(8,1))',64*nelem,1);
 jK = reshape(kron(edofMat,ones(1,8))',64*nelem,1);
 % iF = reshape(edofMat',8*nelem,1);
-U = zeros(ndof,1); PHI = zeros(ndof,nevals);
+U = zeros(ndof,1);
 % For stress computations
 B = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 -1/2 0 1/2 0 1/2
@@ -186,7 +194,6 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
-x = x;
 % x = 0.6*ones(nelem, 1);
 % x(1:7:nelem) = 0.1;
 % x(T(:,5)==1) = 0.3*(1e-6);    % voids
@@ -204,6 +211,8 @@ a     = zeros(m,1);         % column vector with the constants a_i in the terms 
 c_MMA = 1000*ones(m,1);     % column vector with the constants c_i in the terms c_i*y_i.
 d     = ones(m,1);          % column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
 fval = ones(m,1);           % initial constraint values
+change_phys = inf;
+change = inf;
 
 % Compute initial density field
 xTilde = filter(x);
@@ -223,7 +232,7 @@ while (...
         || beta < betamax;
     CONTINUATION_UPDATE = ...
         CONTINUATION_ONGOING ...
-        && loop >= jumpnext;
+        && (loop >= jumpnext || change_phys < 1e-2);
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
         if pE == pphysmax
@@ -238,7 +247,7 @@ while (...
     SOLVE_EXACTLY = ...
         loop < CA_START ...
         || ~mod(loop, CHOL_UPDATE_PACE) ...
-        || change_phys > 15e-2 ...
+        || change_phys > ca_changetol ...
         || CONTINUATION_UPDATE;
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
@@ -390,7 +399,7 @@ while (...
             end
             v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
             imgk = sparse(i_img,j_img,v_img);
-            axes(ax(k));
+            axes(ax(k));                                        %#ok<LAXES> 
             imagesc(imgk);
         end
         drawnow;
@@ -456,12 +465,11 @@ while (...
     Stats(loop,1:1+m+nevals+3+3+2) = [f0val fval' lambda' change, change_phys, pE pN beta SV];
 end
 saveas(gcf, 'design.png');
-runtime = toc(tstart);      
-clear(...
-    'fig', 'ax', ...
-    'T', 'dsGdx', 'iK', 'jK', 'sK', 'K', 'sG', 'KNL', ...
-    'sK', 'KF', 'iKF', 'jKF', 'sKF', 'sMF', ...
-    'R', 'Rold', 'P', 'Pold', 'PF', ...
-    'LF', 'TF', 'PF', ...
-    'ADJsol', 'ADJload')
+runtime = toc(tstart);
+clearvars i* j* s* d* edof* *old* *new* *mma* PHI* ...
+    evecs adj* ADJ* EPS SIG filter ...
+    ax low upp ...
+    freedofs X U ce term1 term2 *img* *val* ...
+    -EXCEPT xPhys xTilde x
+close(fig)
 save(filename);

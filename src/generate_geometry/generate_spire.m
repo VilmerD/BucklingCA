@@ -8,7 +8,7 @@ dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
 l_load = 0.02*sizey;            % distribution length for point load
 l_supp = 0.45*sizey;
-l_neu = l_load*2;
+l_neu = l_load*2 + dy/2;
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
