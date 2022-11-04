@@ -85,13 +85,13 @@ solids = find(T(:,5)==2);   % find solid elements
 voids = find(T(:,5)==1);   % find void elements
 
 % Load at right end with x=sizex and y=sizey/2+-l_load
-loadednode = bitand(...
+loadednodes = bitand(...
     abs(X(:,1)-sizex)-0 <100*eps, ...
     abs(X(:,2)-sizey/2)-l_load <100*eps);
-loadednode = find(loadednode);
-loadeddof = 2*loadednode;
-loadmag = -1e4/numel(loadeddof);
-F = sparse(loadeddof,1,loadmag,2*size(nodelist_clean,1),1);
+loadednodes = find(loadednodes);
+loadeddofs = 2*loadednodes;
+loadmag = -1e4/numel(loadeddofs);
+F = sparse(loadeddofs,1,loadmag,2*size(nodelist,1),1);
 
 % Supports
 if (1<0)
@@ -108,19 +108,30 @@ else
     supnodes = find(supnodes);
     supdofs = [2*supnodes-1,2*supnodes];
 end
-alldofs = 1:2*size(nodelist_clean,1);
+alldofs = 1:2*size(nodelist,1);
 freedofs = setdiff(alldofs,supdofs);
 %% Plot nodes as points
-if (0)
-    figure(1);
-    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
+if (doplot)
+    figure;
+    axes(gcf);
     hold on;
     axis equal
     axis tight
-end
-% Plot elements
-if (0)
-    figure(2);
+    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
+    % Plot supports in x and y
+    supnodesx = (supdofs(logical(mod(supdofs, 2)))+1)/2;
+    plot(X(supnodesx, 1), X(supnodesx, 2), 'b>');
+    supnodesy = supdofs(logical(mod(supdofs-1, 2)))/2;
+    plot(X(supnodesy, 1), X(supnodesy, 2), 'b^');
+    % Plot laoded nodes in x and y
+    loadednodesx = (loadeddofs(logical(mod(loadeddofs, 2)))+1)/2;
+    plot(X(loadednodesx, 1), X(loadednodesx, 2), 'r>');
+    loadednodesy = loadeddofs(logical(mod(loadeddofs-1, 2)))/2;
+    plot(X(loadednodesy, 1), X(loadednodesy, 2), 'r^');
+    
+    % Plot elements
+    figure;
+    axes(gcf);
     hold on;
     axis equal
     axis tight
@@ -133,10 +144,10 @@ if (0)
     % Solid element
     eSolid = T(e, 5) == 2;
     plot(T(eSolid, 7), T(eSolid, 8), 'k*');
-end
-% Plot boundary elements for filter BCs
-if (doplot)
-    figure(3);
+
+    % Plot boundary elements for filter BCs
+    figure;
+    axes(gcf);
     hold on;
     axis equal
     axis tight

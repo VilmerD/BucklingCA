@@ -7,6 +7,7 @@
 % clc;
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
+addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
@@ -19,7 +20,7 @@ if exist('helem', 'var') == 0
     helem = helem*1;
 end
 if exist('domain', 'var') == 0
-    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
+    domain = 'spire';                    % options are: 'column' 'spire' 'twobar'
 end
 %% Material properties
 Emax = 2e5;
@@ -229,7 +230,7 @@ while (...
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
     K = sparse(iK,jK,sK); K = (K+K')/2;
-    
+
     tstart_stat = tic;
     if SOLVE_EXACTLY || SOLVE_STAT_EXACTLY
         % SOLVE STATICS WITH CHOLESKY FACTORIZATION
@@ -281,14 +282,14 @@ while (...
     xnew     = xmma;
     xold2    = xold1;
     xold1    = xval;
-    
+
     % Filter new fields
     xTildenew = filter(xnew);
     xPhysnew = (tanh(beta*0.5)+tanh(beta*(xTildenew-0.5)))/...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
     change      = max(abs(xnew-xval));
     change_phys = max(abs(xPhysnew - xPhys));
-    
+
     % Update fields
     x = xnew;
     xTilde = xTildenew;
@@ -306,6 +307,13 @@ end
 runtime = toc(tstart);
 %% Compute BLF
 nevals = 6;
+pE = 6;
+pS = 6;
+% Compute linear stiffness
+sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
+K = sparse(iK,jK,sK); K = (K+K')/2;
+[R, FLAG, P] = chol(K(freedofs, freedofs), 'matrix');
+U = msolveq(K, F, bc, R, P);
 % Compute geometric stiffness
 EPS = U(edofMat)*B';                                % strain
 SIG = EPS*D;                                        % stress for E=1
@@ -330,21 +338,11 @@ mu_max_app = norm(mu,pN);
 lambda = 1./mu;
 lambda_min_acc = 1/mu_max_acc;
 lambda_min_app = 1/mu_max_app;
-%% Clear data before saving
-saveas(fig, 'design.png');
-clear(...
-    'fig', 'ax', ...
-    'dsGdx', 'iK', 'jK', 'sK', 'K', 'Kold', 'sG', 'KNL', ...
-    'sK', 'KF', 'iKF', 'jKF', 'sKF', 'sMF', ...
-    'R', 'Rold', 'P', 'Pold', 'PF', ...
-    'LF', 'TF', 'PF', ...
-    'ADJsol', 'ADJload', 'evecs', ...
-    'edofMat', 'edofMatF', ...
-    'EPS', 'SIG', 'PHI', ...
-    'U')
 %% Save
 name = sprintf('%s.mat', domain);
-mfile = fullfile('data/compliance_reference', name);
-dat = struct('sizex', sizex, 'sizey', sizey, 'volfrac', volfrac, 'rmin', rmin, ...
-    'lambda', lambda', 'x', x, 'xPhys', xPhys);
+destin_dir = 'data/compliance_reference';
+mfile = fullfile(destin_dir, name);
+dat = struct('sizex', sizex, 'sizey', sizey, 'helem', helem, ...
+    'volfrac', volfrac, 'rmin', rmin, ...
+    'xPhys', xPhys, 'lambda', lambda');
 save(mfile, '-struct', 'dat');

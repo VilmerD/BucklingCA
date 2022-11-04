@@ -3,8 +3,8 @@ function [x, b, varargout] = msolveq(A, b, bc, Rold, Pold, Aold, s)
 % A*x = b with boundary conditions bc. Q are the reaction forces and R is
 % the cholesky factorization of the free part of K.
 %
-% [x, b, R] = MSOLVEQ(A, b, bc, R) solves the linear system of equations 
-% where R is the cholesky factorization of A.
+% [x, b, R] = MSOLVEQ(A, b, bc, R, P) solves the linear system of equations 
+% where R is the cholesky factorization of A with permutation matrix P.
 %
 % [x, b, U, T, R, V] = MSOLVEQ(A, b, bc, Rold, Aold, s) approximates the 
 % solution u to the linear system of equations using CA. Kold is the 
@@ -33,8 +33,11 @@ bf = b(nf) - A(nf, np)*xp;
 % Solving free system
 if nargin <= 5
     % Solve the problem using cholesky factorization
-    if nargin < 5
+    if nargin < 4
         [Rcurr, ~, Pcurr] = chol(Aff, 'matrix');
+    elseif nargin == 4
+        Rcurr = Rold;
+        Pcurr = speye(size(Rcurr));
     else
         Rcurr = Rold;
         Pcurr = Pold;

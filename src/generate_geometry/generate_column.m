@@ -112,10 +112,11 @@ freedofs = setdiff(alldofs,supdofs)';
 %% Plot nodes as points
 if (doplot)
     figure;
-    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
+    axes(gcf);
     hold on;
     axis equal
     axis tight
+    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
     % Plot supports and loads in x and y
     supnodesx = (supdofs(logical(mod(supdofs, 2)))+1)/2;
     plot(X(supnodesx, 1), X(supnodesx, 2), 'b>');
@@ -125,10 +126,10 @@ if (doplot)
     plot(X(loadednodesx, 1), X(loadednodesx, 2), 'r>');
     loadednodesy = loadeddofs(logical(mod(loadeddofs-1, 2)))/2;
     plot(X(loadednodesy, 1), X(loadednodesy, 2), 'r^');
-end
-% Plot elements
-if (doplot)
+    
+    % Plot elements
     figure;
+    axes(gcf);
     hold on;
     axis equal
     axis tight
@@ -141,10 +142,10 @@ if (doplot)
     % Solid element
     eSolid = T(e, 5) == 2;
     plot(T(eSolid, 7), T(eSolid, 8), 'k*');
-end
-% Plot boundary elements for filter BCs
-if (doplot)
+
+    % Plot boundary elements for filter BCs
     figure;
+    axes(gcf);
     hold on;
     axis equal
     axis tight
