@@ -5,7 +5,7 @@
 % close all;
 % commandwindow;
 % clc;
-% load('input.mat')
+load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
@@ -64,8 +64,7 @@ beta = 6;                                           % thresholding steepness
 betamax = 6;
 dbeta = 1;
 
-changetol       = 0.05;                                     % max change in design
-ca_changetol    = 0.500;
+changetol = 0.05;                                     % max change in design
 jumpnext = 20;                                              % next jump loop
 pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace
 
@@ -81,9 +80,9 @@ Stats = zeros(minloop,1+2+nevals+3+3+2);
 %% Initialize CA
 % Booleans controlling whether or not to use CA for
 % the individual problems
-SOLVE_STAT_EXACTLY = 1;
-SOLVE_EIGS_EXACTLY = 1;
-SOLVE_ADJT_EXACTLY = 1;
+SOLVE_STAT_EXACTLY = 0;
+SOLVE_EIGS_EXACTLY = 0;
+SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
 if ~exist('NBASIS_STAT', 'var')
     NBASIS_STAT = 06;
@@ -99,6 +98,9 @@ if ~exist('CA_START', 'var')
 end
 if ~exist('CHOL_UPDATE_PACE', 'var')
     CHOL_UPDATE_PACE = 5;
+end
+if ~exist('CA_CHANGE_TOL', 'var')
+    CA_CHANGE_TOL = 0.300;
 end
 %% Initialize figure
 nimgx = 2;
@@ -194,10 +196,7 @@ bc(:, 2) = 0;
 %% Initialize MMA
 m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
 n     = nelem;                                  % number of design variables x_j.
-% x = 0.6*ones(nelem, 1);
-% x(1:7:nelem) = 0.1;
-% x(T(:,5)==1) = 0.3*(1e-6);    % voids
-% x(T(:,5)==2) = 0.3*(1-1e-6);  % solids
+mmalen = 0.100;
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -247,7 +246,7 @@ while (...
     SOLVE_EXACTLY = ...
         loop < CA_START ...
         || ~mod(loop, CHOL_UPDATE_PACE) ...
-        || change_phys > ca_changetol ...
+        || change_phys > CA_CHANGE_TOL ...
         || CONTINUATION_UPDATE;
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
@@ -434,8 +433,10 @@ while (...
             fval(2,1) = mu_max_app/mustar - 1;
             dfdx(2,:) = dmu_max_app/mustar;
     end
+    xmink = max(xmin,xval-mmalen);
+    xmaxk = min(xmax,xval+mmalen);
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
-        mmasub(m,n,loop,xval,max(xmin,xval-0.2),min(xmax,xval+0.2),xold1,xold2, ...
+        mmasub(m,n,loop,xval,xmink,xmaxk,xold1,xold2, ...
         f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
     %% Update MMA Variables
     xnew     = xmma;
@@ -467,9 +468,10 @@ end
 saveas(gcf, 'design.png');
 runtime = toc(tstart);
 clearvars i* j* s* d* edof* *old* *new* *mma* PHI* ...
+    K R P KNL TF LF PF...
     evecs adj* ADJ* EPS SIG filter ...
     ax low upp ...
-    freedofs X U ce term1 term2 *img* *val* ...
-    -EXCEPT xPhys xTilde x
+    T freedofs X U ce term1 term2 *img* *val* ...
+    -EXCEPT xPhys xTilde x sizex sizey domain
 close(fig)
 save(filename);
