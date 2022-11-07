@@ -32,17 +32,17 @@ nu = 0.3;
 % i_img,j_img = for displaying design as a matrix using imagesc
 switch lower(domain)
     case 'column'
-        sizex = 240;
-        sizey = 120;
-        volfrac = 0.25;
+        sizex = 210;
+        sizey = 090;
+        volfr = 0.25;
     case 'spire'
-        sizex = 240;
-        sizey = 120;
-        volfrac = 0.35;
+        sizex = 210;
+        sizey = 090;
+        volfr = 0.25;
     case 'twobar'
-        sizex = 120;
-        sizey = 280;
-        volfrac = 0.20;
+        sizex = 090;
+        sizey = 210;
+        volfr = 0.20;
 end
 genfun = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,1);
@@ -273,8 +273,8 @@ while (...
     end
     f0val = scale*comp;
     df0dx = scale*dc;
-    fval(1,1) = v/volfrac - 1;
-    dfdx(1,:) = dv/volfrac;
+    fval(1,1) = v/volfr - 1;
+    dfdx(1,:) = dv/volfr;
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
         mmasub(m,n,loop,xval,max(xmin,xval-0.2),min(xmax,xval+0.2),xold1,xold2, ...
         f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
@@ -338,6 +338,6 @@ name = sprintf('%s.mat', domain);
 destin_dir = 'data/compliance_reference';
 mfile = fullfile(destin_dir, name);
 dat = struct('sizex', sizex, 'sizey', sizey, 'helem', helem, ...
-    'volfrac', volfrac, 'rmin', rmin, ...
+    'volfrac', volfr, 'rmin', rmin, ...
     'xPhys', xPhys, 'x', x, 'lambda', lambda');
 save(mfile, '-struct', 'dat');

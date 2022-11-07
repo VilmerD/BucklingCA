@@ -1,6 +1,7 @@
 function fig = plotDesign(i_img, j_img, xx)
 sizey = max(i_img);
 sizex = max(j_img);
+helem = sqrt(sizex*sizey/numel(xx));
 fig = figure(...
     'Position', [50, 50, sizex, sizey]/helem, ...
     'MenuBar', 'none');

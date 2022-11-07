@@ -12,7 +12,7 @@ addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
-tsol = zeros(1, 3);
+tsol = zeros(1, 4);
 %% Choose problem type
 prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
@@ -48,25 +48,26 @@ if exist('rmin', 'var') == 0
     rmin = 3;
 end
 %% Initialize optimization
-minloop = 180;                                      % minimum number of loops
+minloop = 330;                                      % minimum number of loops
 maxloop = 400;
 
-pE = 2;                                             % SIMP penalty for linear stiffness
-pS = 2;                                             % SIMP penalty for stress stiffness
+pE = 1;                                             % SIMP penalty for linear stiffness
+pS = 1;                                             % SIMP penalty for stress stiffness
 pphysmax = 6;                                       % maximum penalization
 dpphys = 0.25;                                      % change in penalty
+psteps = ceil((pphysmax-pE)/dpphys);
 
 pN = 8;                                             % p-norm for eigenvalues
-pNmax = 32;
-dpN = 2;
+pNmax = 64;
+dpN = pNmax/psteps;
 
 beta = 6;                                           % thresholding steepness
 betamax = 6;
 dbeta = 1;
 
-changetol = 0.05;                                     % max change in design
-jumpnext = 20;                                              % next jump loop
-pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace
+changetol = 0.05;                                   % max change in design
+jumpnext = 30;                                      % next jump loop
+pace = (minloop-jumpnext)/psteps;                 % update pace
 
 % Target blf
 if exist('f', 'var') == 0
@@ -100,7 +101,7 @@ if ~exist('CHOL_UPDATE_PACE', 'var')
     CHOL_UPDATE_PACE = 5;
 end
 if ~exist('CA_CHANGE_TOL', 'var')
-    CA_CHANGE_TOL = 0.300;
+    CA_CHANGE_TOL = 0.250;
 end
 %% Initialize figure
 nimgx = 2;
@@ -194,9 +195,9 @@ bc = (1:ndof)';
 bc(freedofs) = [];
 bc(:, 2) = 0;
 %% Initialize MMA
-m     = 1 + 1*strcmp(prtype,'COMP_ST_BLF');     % number of general constraints.
-n     = nelem;                                  % number of design variables x_j.
-mmalen = 0.100;
+m     = 2;                  % number of general constraints.
+n     = nelem;              % number of design variables x_j.
+mmalen = 0.100;             % maximum change every design update
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -231,7 +232,7 @@ while (...
         || beta < betamax;
     CONTINUATION_UPDATE = ...
         CONTINUATION_ONGOING ...
-        && (loop >= jumpnext || change_phys < 1e-2);
+        && loop >= jumpnext;
     if CONTINUATION_UPDATE
         jumpnext = loop + pace;
         if pE == pphysmax
@@ -255,7 +256,9 @@ while (...
     tstart_stat = tic;
     if SOLVE_EXACTLY || SOLVE_STAT_EXACTLY
         % SOLVE STATICS WITH CHOLESKY FACTORIZATION
+        tstart_fct = tic;
         [R, FLAG, P] = chol(K(freedofs, freedofs), 'matrix');
+        tsol(loop, 1) = toc(tstart_fct);
         U = msolveq(K, F, bc, R, P);
         % Update 'old' quantities
         Rold = R;
@@ -266,7 +269,7 @@ while (...
         U = msolveq(K, F, bc, ...
             Rold, Pold, Kold, NBASIS_STAT);
     end
-    tsol(loop, 1) = toc(tstart_stat);
+    tsol(loop, 2) = toc(tstart_stat) - tsol(loop, 1);
     %% Compliance and its sensitivity
     ce = sum((U(edofMat)*KE).*U(edofMat),2);
     comp = sum(sum((Emin+xPhys.^pE*(Emax-Emin)).*ce));
@@ -322,7 +325,7 @@ while (...
     lambda_min_acc = 1/mu_max_acc;
     lambda_min_app = 1/mu_max_app;
 
-    tsol(loop, 2) = toc(tstart_eigs);
+    tsol(loop, 3) = toc(tstart_eigs);
     %% Sensitivities of buckling load factor
     % Compute sensitivity term #1 -PHI'*(dGdx+mu*dKdx)*PHI
     dmu1 = zeros(nelem,nevals);
@@ -366,8 +369,9 @@ while (...
                 Rold, Pold, Kold, NBK);
         end
     end
-    tsol(loop, 3) = toc(tstart_adjt);
-
+    tsol(loop, 4) = toc(tstart_adjt);
+    
+    % Compute sensitivities
     dmu2 = 0*dmu1;
     for j = 1:nevals
         adjsol = ADJsol(:,j);
@@ -471,7 +475,7 @@ clearvars i* j* s* d* edof* *old* *new* *mma* PHI* ...
     K R P KNL TF LF PF...
     evecs adj* ADJ* EPS SIG filter ...
     ax low upp ...
-    T freedofs X U ce term1 term2 *img* *val* ...
-    -EXCEPT xPhys xTilde x sizex sizey domain
+    freedofs X U ce term1 term2 *img* *val* ...
+    -EXCEPT xPhys xTilde x sizex sizey domain T
 close(fig)
 save(filename);

@@ -6,9 +6,9 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_column(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-l_load = 0.04*sizey+dy;         % distribution length for point load
-l_supp = l_load;
-l_neu = l_load;
+loadL = 0.04*sizey;             % distribution length for point load
+suppL = 1.00*loadL;
+neumL = 2.00*suppL;
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
@@ -66,8 +66,8 @@ for e = 1:nelem
     if (y_cent-dy/2<100*eps);          T(e,10) = 1; end    % bottom face
     if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
     if (y_cent+dy/2-sizey>-100*eps);   T(e,12) = 1; end    % top face
-    if (abs(x_cent-dx/2 - 0)     < 100*eps  && abs(y_cent-sizey/2)-l_neu/2<100*eps); T(e,09) = 0; end % left face, near support
-    if (abs(x_cent+dx/2 - sizex) < 100*eps  && abs(y_cent-sizey/2)-l_neu/2<100*eps); T(e,11) = 0; end % right face, near load
+    if (abs(x_cent-0)     < dx/2 + 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,09) = 0; end % left face, near support
+    if (abs(x_cent-sizex) < dx/2 + 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,11) = 0; end % right face, near load
 end
 %% Create matrix representation of topology
 xmin = dx/2; 
@@ -86,7 +86,7 @@ voids = find(T(:,5)==1);    % find void elements
 % Load at right end with x=sizex and y=sizey/2+-l_load
 loadednodes = bitand(...
     abs(X(:,1)-sizex)-0             <100*eps, ...
-    abs(X(:,2)-sizey/2)-l_load/2    <100*eps);
+    abs(X(:,2)-sizey/2)-loadL/2    <100*eps);
 loadednodes = find(loadednodes);
 loadeddofs = 2*loadednodes-1;               % Force only in y
 load = -1e4/numel(loadeddofs)*ones(size(loadeddofs));
@@ -95,13 +95,13 @@ F = sparse(loadeddofs,1,load,2*size(nodelist_clean,1),1,numel(loadeddofs));
 % Supports at left end with x=0 and y=sizey/2+-l_load
 supnodes1 = bitand(...
     abs(X(:,1)-0)-0                 <100*eps, ...
-    abs(X(:,2)-sizey/2)-l_supp/2    <100*eps);
+    abs(X(:,2)-sizey/2)-suppL/2     <100*eps);
 supnodes1 = find(supnodes1);
 supdofs1 = [2*supnodes1-1; 2*supnodes1];     % Support in y and y
 % Supports at right end with x=sizex and y=sizey/2+-l_load
 supnodes2 = bitand(...
     abs(X(:,1)-sizex)-0             <100*eps, ...
-    abs(X(:,2)-sizey/2)-l_supp/2    <100*eps);
+    abs(X(:,2)-sizey/2)-suppL/2     <100*eps);
 supnodes2 = find(supnodes2);
 supdofs2 = 2*supnodes2;     % Support only y
 supdofs = unique([supdofs1;supdofs2]);
