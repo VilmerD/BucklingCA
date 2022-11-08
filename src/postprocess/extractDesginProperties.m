@@ -1,23 +1,16 @@
 %% Given a design computes blf, volume fraction, compliance etc
 % Assuming square elements (ie L = H)
 % Define data (temporary)
-farm = 'rom3';
-jobnums = 0:16;
+farm = 'ref7';
+jobnums = 0:11;
 %% Extract design data
+if isempty(gcp); pool = parpool(6); end
 datmat_des = struct(...
     'VF', {}, ...
     'C', {}, ...
     'L', {}, ...
     'pL', {}, ...
     'Ls', {});
-parfor k = 1:numel(jobnums)
-    jobk = sprintf('job_%i', jobnums(k));
-    datfile_inp = fullfile('processed_data/batches', farm, jobk, 'input.mat');
-    datfile_res = fullfile('processed_data/batches', farm, jobk, 'results.mat');
-    [VFk, Ck, Lk, pLk, Lsk] = extractDesignProperties(datfile_inp, datfile_res);
-    datmat_des(k) = struct('VF', VFk, 'C', Ck, 'L', Lk, 'pL', pLk, 'Ls', Lsk);
-end
-%% Extract work data
 datmat_wrk = struct(...
     'nIts', {}, ...
     'nFact', {}, ...
@@ -27,10 +20,12 @@ datmat_wrk = struct(...
     'wT', {}, ...
     'wTT', {}, ...
     'runtime', {});
-for k = 1:numel(jobnums)
+parfor (k = 1:numel(jobnums), pool)
     jobk = sprintf('job_%i', jobnums(k));
     datfile_inp = fullfile('processed_data/batches', farm, jobk, 'input.mat');
     datfile_res = fullfile('processed_data/batches', farm, jobk, 'results.mat');
+    [VFk, Ck, Lk, pLk, Lsk] = extractDesignProperties(datfile_inp, datfile_res);
+    datmat_des(k) = struct('VF', VFk, 'C', Ck, 'L', Lk, 'pL', pLk, 'Ls', Lsk);
     datmat_wrk(k) = extractWork(datfile_inp, datfile_res);
 end
 
@@ -43,19 +38,9 @@ save(datfilename, 'datmat_des', 'datmat_wrk');
 function [VF, C, L, pL, Ls] = extractDesignProperties(inpfile, resfile)
 % Load data
 load(inpfile, 'domain');
-load(resfile, 'xPhys', ...
-    'Emin', 'Emax', 'nu',  'pE', 'pS', 'KE');
-switch lower(domain)
-    case 'column'
-        sizex = 240;
-        sizey = 120;
-    case 'spire'
-        sizex = 240;
-        sizey = 120;
-    case 'twobar'
-        sizex = 120;
-        sizey = 280;
-end
+load(resfile, 'sizex', 'sizey', ...
+    'Emin', 'Emax', 'nu',  'pE', 'pS', 'KE', ...
+    'xPhys');
 helem = sqrt(sizex*sizey/numel(xPhys));
 % Generate Geometry
 genfun = str2func(sprintf('generate_%s', domain));

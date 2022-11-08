@@ -2,27 +2,14 @@
 % Assuming rectangular grid
 % Define some parameters
 cmap = 'parula';
-source_dir = 'processed_data/rom3/';
-job_nbrs = 6:8;
+farm = 'rom8';
+job_nbrs = 0:11;
+source_dir = fullfile('processed_data/batches/', farm);
 destin_dir = 'results/designs/blfopt_approx';
-domains = {'column', 'spire', 'twobar'};
-for k = 1:numel(domains)
+for k = job_nbrs
     % Define domain and load compliance reference
-    domain = domains{k};
-    jobname = sprintf('job_%i', job_nbrs(k));
-    source_filename = fullfile(source_dir, jobname, 'results.mat');
-    load(source_filename, 'xPhys');
-    switch lower(domain)
-        case 'column'
-            sizex = 240;
-            sizey = 120;
-        case 'spire'
-            sizex = 240;
-            sizey = 120;
-        case 'twobar'
-            sizex = 120;
-            sizey = 280;
-    end
+    source_filename = fullfile(source_dir, sprintf('job_%i', k), 'results.mat');
+    load(source_filename, 'sizex', 'sizey', 'domain', 'xPhys');
     helem = sqrt((sizex*sizey)/numel(xPhys));         % Assuming rectangular grid
     % Generate geometry
     genfun = str2func(sprintf('generate_%s', domain));
@@ -40,7 +27,7 @@ for k = 1:numel(domains)
     ax = gca();
     colormap(ax, cmap);
     % Save figure
-    destin_filename = fullfile(destin_dir, sprintf('%s.png', domain));
+    destin_filename = fullfile(destin_dir, sprintf('%s%i.png', domain, k));
     saveas(fig, destin_filename);
     close(fig);
 end

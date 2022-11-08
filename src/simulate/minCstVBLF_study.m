@@ -5,7 +5,7 @@
 % close all;
 % commandwindow;
 % clc;
-load('input.mat')
+% load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
@@ -110,16 +110,17 @@ if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
     fig = figure(...
         'MenuBar', 'none', ...
         'Units', 'points', ...
-        'Position', [0, 0, sizex*nimgy, sizey*nimgy]);
+        'Position', [100, 100, sizex*nimgx, sizey*nimgy]);
     for k = 1:nimgx*nimgy
-        x0 = (k - (mod(k-1, nimgy)+1))/nimgy*sizex;
-        y0 = (nimgy - (mod(k-1, 2)+1))*sizey;
+        x0 = (k     - (mod(k-1, nimgy)+1))/nimgy*sizex;
+        y0 = (nimgy - (mod(k-1, nimgy)+1))*sizey;
         ax(k) = axes(fig, ...
             'Units', 'points', ...
             'Position', [x0, y0, sizex, sizey]);          %#ok<SAGROW>
+        hold(ax(k), 'on');
         axis(ax(k), 'off');
         axis(ax(k), 'image');
-        hold(ax(k), 'on');
+        colormap(ax(k), 'parula');
     end
 end
 %% Prepare FEA (88-line style)
@@ -392,17 +393,26 @@ while (...
         for k = 1:nimgx*nimgy
             if k == 1
                 xx = xPhys;
+                tit = '\nu';
             elseif k == 2
                 xx = dmu_max_app;
+                tit = '\partial \mu_c';
             elseif k == 3
                 xx = dc;
+                tit = '\partial c';
             else
                 xx = dmu(:, k-nimgy);
+                tit = sprintf('\\partial \\mu_%i', k-nimgy);
             end
             v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
             imgk = sparse(i_img,j_img,v_img);
             axes(ax(k));                                        %#ok<LAXES>
             imagesc(imgk);
+            xt = ruler2num(sizex*1.00, ax(k).XAxis);
+            yt = ruler2num(sizey*2.00, ax(k).YAxis);
+            text(ax(k), xt, yt, tit, ...
+                'HorizontalAlignment', 'center', ...
+                'VerticalAlignment', 'top');
         end
         drawnow;
     end

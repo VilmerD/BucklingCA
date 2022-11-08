@@ -27,10 +27,9 @@ fig = figure(...
     'MenuBar', 'none');
 ax = axes(fig, ...
     'Position', [0, 0, 1, 1]);
-axis(ax, 'off');
-axis(ax, 'tight')
 hold(ax, 'on');
-% axis(ax, 'tight');
+axis(ax, 'off');
+axis(ax, 'tight');
 dimg = sparse(i_img, j_img, xx);
 imagesc(ax, dimg);
 colormap(ax, cmap);
