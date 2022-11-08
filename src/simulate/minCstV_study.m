@@ -38,7 +38,7 @@ switch lower(domain)
     case 'spire'
         sizex = 210;
         sizey = 090;
-        volfr = 0.25;
+        volfr = 0.35;
     case 'twobar'
         sizex = 090;
         sizey = 210;
@@ -49,12 +49,13 @@ genfun = str2func(sprintf('generate_%s', domain));
 %% Filter
 rmin = 3.00; % filter radius (for convolution density filter)
 %% Initialize optimization
-minloop = 200;                                      % minimum number of loops
+minloop = 55;                                       % minimum number of loops
 
 pE = 3;                                             % SIMP penalty for linear stiffness
 pS = 3;                                             % SIMP penalty for stress stiffness
-pphysmax = 3;                                       % maximum penalization
-dpphys = 0;                                      % change in penalty
+pphysmax = 6;                                       % maximum penalization
+dpphys = 0.50;                                      % change in penalty
+pjumps = (pphysmax - pE)/dpphys;
 
 pN = 32;                                             % p-norm for eigenvalues
 pNmax = 32;
@@ -65,8 +66,8 @@ betamax = 6;
 dbeta = 1;
 
 changetol = 5e-2;                                           % max change in design
-jumpnext = 20;                                              % next jump loop
-pace = max(10,(minloop-jumpnext)/((pphysmax-pE)/dpphys));   % update pace                                     % next jump loop
+jumpnext = 10;                                              % next jump loop
+pace = (minloop-jumpnext)/pjumps;                           % update pace
 
 loop = 0;
 Stats = zeros(minloop,1+2+3+3+2);

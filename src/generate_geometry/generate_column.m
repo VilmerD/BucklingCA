@@ -66,8 +66,8 @@ for e = 1:nelem
     if (y_cent-dy/2<100*eps);          T(e,10) = 1; end    % bottom face
     if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
     if (y_cent+dy/2-sizey>-100*eps);   T(e,12) = 1; end    % top face
-    if (abs(x_cent-0)     < dx/2 + 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,09) = 0; end % left face, near support
-    if (abs(x_cent-sizex) < dx/2 + 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,11) = 0; end % right face, near load
+    if (abs(x_cent-dx/2-0)     < 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,09) = 0; end % left face, near support
+    if (abs(x_cent+dx/2-sizex) < 100*eps  && abs(y_cent-sizey/2)-neumL/2-dy/2<100*eps); T(e,11) = 0; end % right face, near load
 end
 %% Create matrix representation of topology
 xmin = dx/2; 

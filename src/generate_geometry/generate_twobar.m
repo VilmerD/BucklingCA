@@ -9,7 +9,7 @@ dy = helem;                     % element size in y-direction
 loadL = 0.01*sizey;             % distribution length for point load
 suppH = 1.00*sizex;             % Distance from middle line to supports
 suppL = 0.01*sizey;             % Length of support
-neumL = 2.00*suppL;             % Length of boundary with neumann conditions at supports
+neumL = 8.00*suppL;             % Length of boundary with neumann conditions at supports
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
@@ -66,9 +66,9 @@ for e = 1:nelem
     if (y_cent-dy/2<100*eps);          T(e,10) = 1; end    % bottom face
     if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
     if (y_cent+dy/2-sizey>-100*eps);   T(e,12) = 1; end    % top face
-    if (abs(x_cent-0) < 100*eps && ...
-            abs(abs(y_cent-sizey/2)-suppH)-suppL/2<100*eps); T(e,09) = 0; end  % left face
-    if (abs(x_cent-sizex) < 100*eps && ...
+    if (abs(x_cent-dx/2-0) < 100*eps && ...
+            abs(abs(y_cent-sizey/2)-suppH)-suppL/2<neumL/2+100*eps); T(e,09) = 0; end  % left face
+    if (abs(x_cent+dx/2-sizex) < 100*eps && ...
             abs(y_cent-sizey/2)-neumL/2<100*eps);  T(e,11) = 0; end            % right face, near load
 end
 %% Create matrix representation of topology

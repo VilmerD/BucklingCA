@@ -12,14 +12,12 @@ addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
 addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
 tstart = tic;
-tsol = zeros(1, 4);
 %% Choose problem type
 prtype =  'COMP_ST_BLF';                % Minimize compliance subject to buckling const.
 %% Domain size and discretization
 % element size (all elements are square)
 if exist('helem', 'var') == 0
-    helem = 0.50; 
-    helem = helem*1;
+    helem = 0.50;
 end
 if exist('domain', 'var') == 0
     domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
@@ -51,15 +49,15 @@ end
 minloop = 330;                                      % minimum number of loops
 maxloop = 400;
 
-pE = 1;                                             % SIMP penalty for linear stiffness
-pS = 1;                                             % SIMP penalty for stress stiffness
+pE = 2;                                             % SIMP penalty for linear stiffness
+pS = 2;                                             % SIMP penalty for stress stiffness
 pphysmax = 6;                                       % maximum penalization
 dpphys = 0.25;                                      % change in penalty
 psteps = ceil((pphysmax-pE)/dpphys);
 
 pN = 8;                                             % p-norm for eigenvalues
 pNmax = 64;
-dpN = pNmax/psteps;
+dpN = (pNmax - pN)/psteps;
 
 beta = 6;                                           % thresholding steepness
 betamax = 6;
@@ -78,6 +76,7 @@ mustar = 1/lamstar;
 
 loop = 0;
 Stats = zeros(minloop,1+2+nevals+3+3+2);
+tsol = zeros(maxloop, 4);
 %% Initialize CA
 % Booleans controlling whether or not to use CA for
 % the individual problems
@@ -85,7 +84,7 @@ SOLVE_STAT_EXACTLY = 0;
 SOLVE_EIGS_EXACTLY = 0;
 SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
-if ~exist('NBASIS_STAT', 'var')
+if exist('NBASIS_STAT', 'var') == 0
     NBASIS_STAT = 06;
     NBASIS_EIGS = 03;
     NBASIS_ADJT = 06;
@@ -94,18 +93,18 @@ end
 CAOPTS.orthotype = 'current';
 CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
-if ~exist('CA_START', 'var')
+if exist('CA_START', 'var') == 0
     CA_START = 10;
 end
-if ~exist('CHOL_UPDATE_PACE', 'var')
+if exist('CHOL_UPDATE_PACE', 'var') == 0
     CHOL_UPDATE_PACE = 5;
 end
-if ~exist('CA_CHANGE_TOL', 'var')
+if exist('CA_CHANGE_TOL', 'var') == 0
     CA_CHANGE_TOL = 0.250;
 end
 %% Initialize figure
 nimgx = 2;
-nimgy = 2;
+nimgy = 3;
 if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
     SHOW_DESIGN = 1;
     fig = figure(...
@@ -120,7 +119,7 @@ if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
             'Position', [x0, y0, sizex, sizey]);          %#ok<SAGROW>
         axis(ax(k), 'off');
         axis(ax(k), 'image');
-        hold(ax(k), 'on');       
+        hold(ax(k), 'on');
     end
 end
 %% Prepare FEA (88-line style)
@@ -195,24 +194,24 @@ bc = (1:ndof)';
 bc(freedofs) = [];
 bc(:, 2) = 0;
 %% Initialize MMA
-m     = 2;                  % number of general constraints.
-n     = nelem;              % number of design variables x_j.
-mmalen = 0.100;             % maximum change every design update
-xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
-xmin(solids) = 1-1e-3;      % lower bound for solids
-xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
-xmax(voids) = 1e-3;         % upper bound for voids
-xold1 = x;                  % xval, one iteration ago (provided that iter>1).
-xold2 = x;                  % xval, two iterations ago (provided that iter>2).
-low   = 0*ones(n,1);        % column vector with the lower asymptotes from the previous iteration (provided that iter>1).
-upp   = ones(n,1);          % column vector with the upper asymptotes from the previous iteration (provided that iter>1).
-a0    = 1;                  % the constants a_0 in the term a_0*z.
-a     = zeros(m,1);         % column vector with the constants a_i in the terms a_i*z.
-c_MMA = 1000*ones(m,1);     % column vector with the constants c_i in the terms c_i*y_i.
-d     = ones(m,1);          % column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
-fval = ones(m,1);           % initial constraint values
-change_phys = inf;
-change = inf;
+m               = 2;                    % number of general constraints.
+n               = nelem;                % number of design variables x_j.
+mmalen          = 0.100;                % maximum change every design update
+xmin            = 1e-6*ones(n,1);       % column vector with the lower bounds for the variables x_j.
+xmin(solids)    = 1-1e-3;               % lower bound for solids
+xmax            = 1e+0*ones(n,1);       % olumn vector with the upper bounds for the variables x_j.
+xmax(voids)     = 1e-3;                 % upper bound for voids
+xold1           = x;                    % xval, one iteration ago (provided that iter>1).
+xold2           = x;                    % xval, two iterations ago (provided that iter>2).
+low             = 0*ones(n,1);          % column vector with the lower asymptotes from the previous iteration (provided that iter>1).
+upp             = ones(n,1);            % column vector with the upper asymptotes from the previous iteration (provided that iter>1).
+a0              = 1;                    % the constants a_0 in the term a_0*z.
+a               = zeros(m,1);           % column vector with the constants a_i in the terms a_i*z.
+c_MMA           = 1000*ones(m,1);       % column vector with the constants c_i in the terms c_i*y_i.
+d               = ones(m,1);            % column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
+fval            = ones(m,1);            % initial constraint values
+chg_phs         = inf;
+chg_mma         = inf;
 
 % Compute initial density field
 xTilde = filter(x);
@@ -222,7 +221,7 @@ xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
 while (...
         ((loop < jumpnext || CONTINUATION_ONGOING) ...
         || pE < pphysmax ...
-        || change_phys > 5e-2 ...
+        || chg_phs > 5e-2 ...
         )...
         || fval(1,1) > 1e-3) && loop < maxloop
     %% Continuation
@@ -247,12 +246,12 @@ while (...
     SOLVE_EXACTLY = ...
         loop < CA_START ...
         || ~mod(loop, CHOL_UPDATE_PACE) ...
-        || change_phys > CA_CHANGE_TOL ...
+        || chg_phs > CA_CHANGE_TOL ...
         || CONTINUATION_UPDATE;
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
     K = sparse(iK,jK,sK); K = (K+K')/2;
-    
+
     tstart_stat = tic;
     if SOLVE_EXACTLY || SOLVE_STAT_EXACTLY
         % SOLVE STATICS WITH CHOLESKY FACTORIZATION
@@ -317,7 +316,7 @@ while (...
             Rold, Pold, Kold, PHIold, NB, CAOPTS);
         PHI = evecs./sqrt(dot(evecs, K*evecs));
     end
-    
+
     mu = diag(evals);
     mu_max_acc = max(mu);
     mu_max_app = norm(mu,pN);
@@ -370,7 +369,7 @@ while (...
         end
     end
     tsol(loop, 4) = toc(tstart_adjt);
-    
+
     % Compute sensitivities
     dmu2 = 0*dmu1;
     for j = 1:nevals
@@ -395,48 +394,30 @@ while (...
                 xx = xPhys;
             elseif k == 2
                 xx = dmu_max_app;
-%             elseif k == 3
-%                 xx = dc;
+            elseif k == 3
+                xx = dc;
             else
                 xx = dmu(:, k-nimgy);
             end
             v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
             imgk = sparse(i_img,j_img,v_img);
-            axes(ax(k));                                        %#ok<LAXES> 
+            axes(ax(k));                                        %#ok<LAXES>
             imagesc(imgk);
         end
         drawnow;
     end
     %% MMA
     xval  = x;
-    switch prtype
-        case 'COMP' % minCstV
-            if (loop==1)
-                scale = 10/comp;
-            end
-            f0val = scale*comp;
-            df0dx = scale*dc;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-        case 'BLF' % min gamma
-            if (loop==1)
-                scale = 10/mu_max_app;
-            end
-            f0val = scale*mu_max_app;
-            df0dx = scale*dmu_max_app;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-        case 'COMP_ST_BLF'
-            if (loop==1)
-                scale = 100/comp;
-            end
-            f0val = scale*comp;
-            df0dx = scale*dc;
-            fval(1,1) = v/volfrac - 1;
-            dfdx(1,:) = dv/volfrac;
-            fval(2,1) = mu_max_app/mustar - 1;
-            dfdx(2,:) = dmu_max_app/mustar;
+    if (loop==1)
+        scale = 100/comp;
     end
+    f0val = scale*comp;
+    df0dx = scale*dc;
+    fval(1,1) = v/volfrac - 1;
+    dfdx(1,:) = dv/volfrac;
+    fval(2,1) = mu_max_app/mustar - 1;
+    dfdx(2,:) = dmu_max_app/mustar;
+
     xmink = max(xmin,xval-mmalen);
     xmaxk = min(xmax,xval+mmalen);
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
@@ -446,14 +427,14 @@ while (...
     xnew     = xmma;
     xold2    = xold1;
     xold1    = xval;
-    
+
     % Filter new fields
     xTildenew = filter(xnew);
     xPhysnew = (tanh(beta*0.5)+tanh(beta*(xTildenew-0.5)))/...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
-    change      = max(abs(xnew-xval));
-    change_phys = max(abs(xPhysnew - xPhys));
-    
+    chg_mma      = max(abs(xnew-xval));
+    chg_phs = max(abs(xPhysnew - xPhys));
+
     % Update fields
     x = xnew;
     xTilde = xTildenew;
@@ -463,11 +444,12 @@ while (...
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
         'BLF: ', repmat('%+10.3e ', 1, nevals), 'BLFAPP %+10.3e ', ...
-        'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i ', ...
+        'CH: %5.3f CHPHS: %5.3f ', ...
+        'pE: %5.2f pN: %5.2f BETAHS: %3i ', ...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
-        loop,f0val,fval', lambda', lambda_min_app, change,change_phys,pE, pN, beta,SV(:));
+        loop,f0val,fval', lambda', lambda_min_app, chg_mma,chg_phs,pE, pN, beta,SV(:));
     %% Save data
-    Stats(loop,1:1+m+nevals+3+3+2) = [f0val fval' lambda' change, change_phys, pE pN beta SV];
+    Stats(loop,1:1+m+nevals+3+3+2) = [f0val fval' lambda' chg_mma, chg_phs, pE pN beta SV];
 end
 saveas(gcf, 'design.png');
 runtime = toc(tstart);
