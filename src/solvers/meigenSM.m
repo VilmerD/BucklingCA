@@ -33,7 +33,8 @@ if nargin <= 6
     end
     [pcurr, ~, ~] = find(Pcurr);
     [Pf, L] = eigs(Aff, Rcurr, ne, 'largestreal', ...
-        'IsCholesky', true, 'CholeskyPermutation', pcurr);
+        'IsCholesky', true, 'CholeskyPermutation', pcurr, ...
+        'Display', false);
     
     % Normalize with respect to the mass matrix
     Pf = Pf./sqrt(dot(Pf, Bff*Pf));

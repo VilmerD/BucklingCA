@@ -5,7 +5,7 @@
 % close all;
 % commandwindow;
 % clc;
-% load('input.mat')
+load('input.mat')
 rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
 addpath(genpath('~/Documents/MATLAB/gcmma'));
 addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
@@ -90,7 +90,7 @@ if exist('NBASIS_STAT', 'var') == 0
     NBASIS_ADJT = 06;
 end
 % Orthogonalization type for eigenproblem
-CAOPTS.orthotype = 'current';
+CAOPTS.orthotype = 'old';
 CAOPTS.orthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
 if exist('CA_START', 'var') == 0
@@ -119,8 +119,9 @@ if exist('SHOW_DESIGN', 'var') == 0 || SHOW_DESIGN
             'Position', [x0, y0, sizex, sizey]);          %#ok<SAGROW>
         hold(ax(k), 'on');
         axis(ax(k), 'off');
-        axis(ax(k), 'image');
+        axis(ax(k), 'tight');
         colormap(ax(k), 'parula');
+        pause(0.50);
     end
 end
 %% Prepare FEA (88-line style)
@@ -202,6 +203,7 @@ xmin            = 1e-6*ones(n,1);       % column vector with the lower bounds fo
 xmin(solids)    = 1-1e-3;               % lower bound for solids
 xmax            = 1e+0*ones(n,1);       % olumn vector with the upper bounds for the variables x_j.
 xmax(voids)     = 1e-3;                 % upper bound for voids
+x               = 0.55*ones(n, 1);
 xold1           = x;                    % xval, one iteration ago (provided that iter>1).
 xold2           = x;                    % xval, two iterations ago (provided that iter>2).
 low             = 0*ones(n,1);          % column vector with the lower asymptotes from the previous iteration (provided that iter>1).
@@ -320,7 +322,7 @@ while (...
 
     mu = diag(evals);
     mu_max_acc = max(mu);
-    mu_max_app = norm(mu,pN);
+    mu_max_app = norm(mu/max(mu),pN)*max(mu);
     lambda = 1./mu;
     lambda_min_acc = 1/mu_max_acc;
     lambda_min_app = 1/mu_max_app;
@@ -379,9 +381,8 @@ while (...
         dmu2(:,j) = -pE*(Emax-Emin)*xPhys.^(pE-1).*vals;
     end
     dmu = dmu1 + dmu2;
-    term1 = 1/pN*(sum(mu.^pN))^(1/pN-1);
-    term2 = (mu.^(pN-1))'*dmu';
-    dmu_max_app = term1*pN*term2';
+    dmucdmu = (mu/mu_max_app)'.^(pN-1);
+    dmu_max_app = dmu*dmucdmu';
     %% Chain rule for projection and filter
     dxPhys = (1 - (tanh(beta*(xTilde-0.5))).^2)*beta / ...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
@@ -395,13 +396,13 @@ while (...
                 xx = xPhys;
                 tit = '\nu';
             elseif k == 2
-                xx = dmu_max_app;
+                xx = log(abs(dmu_max_app));
                 tit = '\partial \mu_c';
             elseif k == 3
                 xx = dc;
                 tit = '\partial c';
             else
-                xx = dmu(:, k-nimgy);
+                xx = log(abs(dmu(:, k-nimgy)));
                 tit = sprintf('\\partial \\mu_%i', k-nimgy);
             end
             v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
@@ -413,6 +414,7 @@ while (...
             text(ax(k), xt, yt, tit, ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'top');
+            pause(0.25);
         end
         drawnow;
     end

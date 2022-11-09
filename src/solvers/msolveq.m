@@ -14,8 +14,12 @@ function [x, b, varargout] = msolveq(A, b, bc, Rold, Pold, Aold, s)
 
 % If bc is empty just solve directly
 if isempty(bc)
-    Rcurr = chol(A);
-    x = Rcurr\(Rcurr'\b);
+    [Rcurr, FLAG, Pcurr] = chol(A, 'matrix');
+    if FLAG
+        errorstruct.message = 'A is not positive definite. Maybe forgot bc?';
+        error(errorstruct);
+    end
+    x = Pcurr*(Rcurr\(Rcurr'\(Pcurr'*b)));
     return
 end
 
@@ -25,8 +29,6 @@ nf = (1:ndof)';
 np = bc(:, 1);
 nf(np) = [];
 
-Aff = A(nf, nf);
-
 xp = bc(:, 2);
 bf = b(nf) - A(nf, np)*xp;
 
@@ -34,11 +36,14 @@ bf = b(nf) - A(nf, np)*xp;
 if nargin <= 5
     % Solve the problem using cholesky factorization
     if nargin < 4
-        [Rcurr, ~, Pcurr] = chol(Aff, 'matrix');
+        % No cholesky factorization of Aff is given, compute it
+        [Rcurr, ~, Pcurr] = chol(A(nf, nf), 'matrix');
     elseif nargin == 4
+        % No permutation matrix is given, assume no permutation
         Rcurr = Rold;
         Pcurr = speye(size(Rcurr));
     else
+        % Both cholesky and P is given, just rename
         Rcurr = Rold;
         Pcurr = Pold;
     end
@@ -46,7 +51,7 @@ if nargin <= 5
     varargout = {Rcurr, Pcurr};
 else
     % Using CA
-    [V, U, T, R] = CASBON(Aff, bf, Rold, Pold, Aold(nf, nf), s);
+    [V, U, T, R] = CASBON(A(nf, nf), bf, Rold, Pold, Aold(nf, nf), s);
     xf = V*(V'*bf);
     varargout = {U, T, R, V};
 end

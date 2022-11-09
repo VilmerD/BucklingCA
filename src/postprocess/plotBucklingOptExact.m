@@ -22,12 +22,11 @@ for k = job_nbrs
         otherwise
             xx = xPhys;
     end
-    fig = plotDesign(i_img, j_img, xx);
-    figure(fig);
-    ax = gca();
-    colormap(ax, cmap);
+    fig = plotDesign(i_img, j_img, xx, cmap);
     % Save figure
-    destin_filename = fullfile(destin_dir, sprintf('%s%i.png', domain, k));
-    saveas(fig, destin_filename);
+    destin_filename_hf = fullfile(destin_dir, sprintf('%s%i.pdf', domain, k));
+    destin_filename_lf = fullfile(destin_dir, sprintf('%s%i.png', domain, k));
+    exportgraphics(fig, destin_filename_hf, 'Append', false);
+    saveas(fig, destin_filename_lf);
     close(fig);
 end
