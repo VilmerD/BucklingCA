@@ -1,10 +1,11 @@
 %% Given a design computes blf, volume fraction, compliance etc
 % Assuming square elements (ie L = H)
 % Define data (temporary)
-farm = 'ref7';
-jobnums = 0:11;
+farm = 'ref8';
+jobnums = 0:8;
 %% Extract design data
-if isempty(gcp); pool = parpool(6); end
+pool = gcp;
+if isempty(pool); pool = parpool(6); end
 datmat_des = struct('VF', {}, 'C', {}, 'L', {}, 'pL', {}, 'Ls', {});
 datmat_wrk = struct('nIts', {}, 'nFact', {}, 'nCA', {}, 'nTri', {}, ...
     'tsol', {}, 'wT', {}, 'wTT', {}, 'runtime', {});
