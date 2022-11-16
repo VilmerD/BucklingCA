@@ -1,39 +1,52 @@
-function S = evaluateOpt(inpfile, resfile)
+function S = evaluateOpt(resfile)
 % Counts number of factorizations etc for solution
-load(resfile, 'Stats');
+load(resfile, 'stats');
 
 % Iterations and factorizations
-nIts    = sum(Stats(:, 1)  ~=0);
-nFact   = sum(Stats(:, end)==1);
+nIts    = sum(stats(:, 1)  ~=0);
+nFact   = sum(stats(:, end)==1);
 nCA     = nIts - nFact;
 
+load(resfile, 'profile_data');
+fnc_table = profile_data.FunctionTable;
+
 % Triangular solves
-load(resfile, 'NBASIS_STAT', 'NBASIS_EIGS', 'NBASIS_ADJT', 'lambda');
-nevals = numel(lambda);
-tpi_stat_fc = 1;
-tpi_eigs_fc = nevals;
-tpi_adjt_fc = nevals;
-tpi_stat_ca = NBASIS_STAT;
-tpi_eigs_ca = NBASIS_EIGS*2 + 2*(nevals-2);
-tpi_adjt_ca = NBASIS_ADJT*2 + 2*(nevals-2);
-if isnan(NBASIS_STAT) || isnan(NBASIS_EIGS) || isnan(NBASIS_ADJT)
-    nTri = [...
-        nFact*tpi_stat_fc...
-        nFact*tpi_eigs_fc...
-        nFact*tpi_adjt_fc];
-else
-    nTri = [...
-        nCA*tpi_stat_ca + nFact*tpi_stat_fc...
-        nCA*tpi_eigs_ca + nFact*tpi_eigs_fc...
-        nCA*tpi_adjt_ca + nFact*tpi_adjt_fc];
-end
-nTri(4) = sum(nTri);
+name_msolveq = 'msolveq';
+lines_solveq = 49;
+nTri(1) = countCalls(fnc_table, name_msolveq, lines_solveq);
+
+name_casbon = 'CASBON';
+lines_casbon = [9, 18];
+nTri(1) = nTri(1) + countCalls(fnc_table, name_casbon, lines_casbon);
+
+name_caeeon = 'CAEEON';
+lines_caeeon = [12, 24];
+nTri(2) = countCalls(fnc_table, name_caeeon, lines_caeeon);
+
+trisolver = 'eigs>@(v)solve(dR,permB''*applyA(permB*solve(dR,v,false)),true)';  % name of function
+itrisolver = cellfun(@(n) strcmp(n, trisolver), {fnc_table.FunctionName});      % index in table
+nTri(2) = nTri(2) + fnc_table(itrisolver).NumCalls;         
+
+nTri(end+1) = sum(nTri);
 
 % Wall - time
-load(resfile, 'runtime', 'tsol');
+load(resfile, 'tsol');
 wT = sum(tsol, 1);
+
 % Save in struct
-datnames = {'nIts', 'nFact', 'nCA', 'nTri', 'tsol', 'wT', 'wTT', 'runtime'};
-datvals = {nIts, nFact, nCA, nTri, tsol, wT, sum(wT), runtime};
+datnames = {'nIts', 'nFact', 'nCA', 'nTri', 'tsol', 'wT', 'wTT'};
+datvals = {nIts, nFact, nCA, nTri, tsol, wT, sum(wT)};
 S = cell2struct(datvals, datnames, 2);
+end
+
+function ncalls = countCalls(fnc_table, fnc_name, lines)
+indx = cellfun(@(n) strcmp(n, fnc_name), {fnc_table.FunctionName});
+fnc = fnc_table(indx);
+ncalls = 0;
+if ~isempty(fnc)
+    exelines = fnc.ExecutedLines;
+    for l = lines
+        ncalls = ncalls + exelines(exelines(:, 1)==l, 2);
+    end
+end
 end

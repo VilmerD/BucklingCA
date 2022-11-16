@@ -1,4 +1,5 @@
-function [X, L, d, V_INTR] = CAeigs(A, B, n, Rold, Pold, Bold, Xold, s, options)
+function [X, L, d, V_INTR] = CAeigs(A, B, n, Rold, Pold, dB, Xold, s, orthotype, ...
+    orthovecs)
 % CAeigs(A, B, n, Rold, Pold, Bold, Xold, s, options) finds the n eigenparis of the
 % generalized eigenvalue problem correspodning to the n eigenvalues with
 % the largest absolute value.
@@ -27,24 +28,25 @@ V_INTR = cell(n, 4);
 for k = 1:n
     % Choose if orthogonalization is to be used and which vectors to
     % orthogonalize with respect to
-    switch upper(options.orthotype)
-        case 'CURRENT'
+    switch lower(orthotype)
+        case 'current'
             XO = X(:, 1:(k-1));
-        case 'OLD'
-            XO = options.orthovecs(:, 1:(k - 1));
+        case 'old'
+            XO = orthovecs(:, 1:(k - 1));
         otherwise
             XO = [];
     end
     
     % Generate basis vectors
-    [Vk, Uk, Tk] = CAEEON(A, B, Rold, Pold, Bold, Xold(:, k), s(k), XO);
+    [Vk, Uk, Tk] = CAEEON(A, B, Rold, Pold, dB, Xold(:, k), s(k), XO);
     
     % Compute reduced model
     A_RED = Vk'*A*Vk;
     B_RED = Vk'*B*Vk;
     
     % Solve reduced problem
-    [X_RED, L_RED] = eigs(A_RED, B_RED, 1, 'largestreal', ...
+    [X_RED, L_RED] = eigs(A_RED, B_RED, 1, ...
+        'largestreal', ...
         'IsCholesky', false);
     
     % Normalize the eigenvectors with respect to A

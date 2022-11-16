@@ -5,23 +5,21 @@
 % close all;
 % commandwindow;
 % clc;
-rmpath(genpath('~/Documents/MATLAB/numfim'));    % Remove this dir as it contains old version of solver
-addpath(genpath('~/Documents/MATLAB/gcmma'));
-addpath(genpath('~/Documents/Projects/BucklingCA/data/'))
-addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'))
-addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'))
-pwd
+%% Add neccessary paths 
+addpath(genpath('~/Documents/Projects/BucklingCA/data/'));
+addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'));
+addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'));
+%% Display some information to user
+fprintf('Starting time of job %s\n', datestr(datetime('now')));
+fprintf('Working directory: %s\n', pwd);
 tstart = tic;
-tsol = zeros(1, 3);
-%% Choose problem type
-prtype =  'COMP';                       % Minimize compliance
-%% Domain size and discretization
-if exist('helem', 'var') == 0
-    helem = 0.50;                          % element size (all elements are square)
+%% Load run data
+if isfile(fullfile(cd, 'input.mat'))
+    variables = 'input.mat';
+else
+    variables = 'data/default_data.mat';
 end
-if exist('domain', 'var') == 0
-    domain = 'twobar';                    % options are: 'column' 'spire' 'twobar'
-end
+INPVARS = load(variables);
 %% Material properties
 Emax = 2e5;
 Emin = Emax*1e-6;
@@ -30,14 +28,16 @@ nu = 0.3;
 % X = nodal coordinates
 % T = element connectivity and data
 % i_img,j_img = for displaying design as a matrix using imagesc
-datfile = fullfile('data/domain_data', sprintf('%s.mat', domain));
-load(datfile);
-genfun = str2func(sprintf('generate_%s', domain));
-[X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(sizex,sizey,helem,1);
-%% Filter
-rmin = 3.00; % filter radius (for convolution density filter)
+helem = INPVARS.helem;
+DOMVARS = load(fullfile('data/domain_data', sprintf('%s.mat', INPVARS.domain)));
+sizex = DOMVARS.sizex; sizey = DOMVARS.sizey; volfrac = DOMVARS.volfrac;
+
+genfun = str2func(sprintf('generate_%s', INPVARS.domain));
+[X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(...
+    DOMVARS.sizex,DOMVARS.sizey,helem,0);
 %% Initialize optimization
 minloop = 55;                                       % minimum number of loops
+maxloop = 100;
 
 pE = 3;                                             % SIMP penalty for linear stiffness
 pS = 3;                                             % SIMP penalty for stress stiffness
@@ -57,16 +57,7 @@ jumpnext = 10;                                              % next jump loop
 pace = (minloop-jumpnext)/pjumps;                           % update pace
 
 loop = 0;
-Stats = zeros(minloop,1+2+3+3+2);
-%% Figure
-if exist('SHOW_DESIGN', 'var') == 0
-    SHOW_DESIGN = 1;
-    fig = figure;
-    fig.Position(3:4) = [sizex sizey]/helem;
-    ax = axes(fig, 'Position', [0, 0, 1, 1]);
-    hold(ax, 'on');
-    axis(ax, 'off');
-end
+stats = zeros(minloop,7);
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -97,6 +88,7 @@ BNL = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 1/2 0 1/2 0 -1/2
     0 -1/2 0 -1/2 0 1/2 0 1/2];          % BNL matrix
 %% Prepare augmented PDE filter (with Robin BC)
+load(variables, 'rmin');
 xi = 1;                     % default for Robin BC (ratio l_s/l_o)
 xi_corner = xi;             	% large xi near re-entrant corner
 l_o = rmin/2/sqrt(3);       % bulk length scale parameter
@@ -132,7 +124,7 @@ jTF = reshape(repmat(1:nelem,4,1)',4*nelem,1);
 sTF = repmat(1/4,4*nelem,1)*helem^2;
 TF = sparse(iTF,jTF,sTF);
 filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
-clear('iKF', 'jKF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
+clear('edofMatF', 'iKF', 'jKF', 'sKF', 'sMF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
 
 % BC needed for msolveq and meigen
 bc = (1:ndof)';
@@ -144,6 +136,7 @@ n     = nelem;              % number of design variables x_j.
 x = 0.6*ones(nelem,1);
 x(T(:,5)==1) = 1*(1e-6);    % voids
 x(T(:,5)==2) = 1*(1-1e-6);  % solids
+mmalen = 0.2;
 xmin  = 1e-6*ones(n,1);     % column vector with the lower bounds for the variables x_j.
 xmin(solids) = 1-1e-3;      % lower bound for solids
 xmax  = ones(n,1);          % olumn vector with the upper bounds for the variables x_j.
@@ -164,12 +157,14 @@ xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
     (tanh(beta*0.5)+tanh(beta*(1-0.5)));
 %% Start iteration
 while (...
-        ((loop < jumpnext || CONTINUATION_ONGOING) ...
-        || pE < pphysmax ...
+        (loop < jumpnext ...
+        || CONTINUATION_ONGOING ...
         || change_phys > 5e-2 ...
         )...
-        || fval(1,1) > 1e-3)
+        || fval(1,1) > 1e-3) ...
+        && loop < maxloop
     %% Continuation
+    loop = loop + 1;
     CONTINUATION_ONGOING = ...
         pE < pphysmax...
         || pN < pNmax ...
@@ -182,19 +177,16 @@ while (...
         if pE == pphysmax
             beta = min(betamax, beta + dbeta);
         end
-        pN = min(pNmax, pN + dpN);
-        pE = min(pphysmax, pE + dpphys);
-        pS = min(pphysmax, pS + dpphys);
+        pN = min(pNmax,     pN + dpN);
+        pE = min(pphysmax,  pE + dpphys);
+        pS = min(pphysmax,  pS + dpphys);
     end
-    loop = loop + 1;
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
     K = sparse(iK,jK,sK); K = (K+K')/2;
 
-    tstart_stat = tic;
     [R, ~, P] = chol(K(freedofs, freedofs), 'matrix');
     U = msolveq(K, F, bc, R, P);
-    tsol(loop, 1) = toc(tstart_stat);
     %% Compliance and its sensitivity
     ce = sum((U(edofMat)*KE).*U(edofMat),2);
     comp = sum(sum((Emin+xPhys.^pE*(Emax-Emin)).*ce));
@@ -207,14 +199,6 @@ while (...
         (tanh(beta*0.5)+tanh(beta*(1-0.5)));
     dv =            filter(dv.*dxPhys);
     dc =            filter(dc.*dxPhys);
-    %% Draw design and stress
-    if SHOW_DESIGN
-        cla(ax, 'reset');
-        v_img = xPhys;
-        top_img = sparse(i_img,j_img,v_img);
-        imagesc(ax, top_img);
-        drawnow;
-    end
     %% MMA
     xval  = x;
     if (loop==1)
@@ -222,10 +206,13 @@ while (...
     end
     f0val = scale*comp;
     df0dx = scale*dc;
-    fval(1,1) = v/volfr - 1;
-    dfdx(1,:) = dv/volfr;
+    fval(1,1) = v/volfrac - 1;
+    dfdx(1,:) = dv/volfrac;
+
+    xmink = max(xmin, xval-mmalen);
+    xmaxk = min(xmax, xval+mmalen);
     [xmma,~,~,~,~,~,~,~,~,low,upp] = ...
-        mmasub(m,n,loop,xval,max(xmin,xval-0.2),min(xmax,xval+0.2),xold1,xold2, ...
+        mmasub(m,n,loop,xval,xmink,xmaxk,xold1,xold2, ...
         f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
     %% Update MMA Variables
     xnew     = xmma;
@@ -246,16 +233,14 @@ while (...
     %% Print results
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
-        'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i '],...
-        loop,f0val,fval',change,change_phys,pE, pN, beta);
+        'CH: %5.3f CHPHS: %5.3f pE: %4.2f pN: %3i BETAHS: %3i \n'],...
+        loop,f0val,fval',change,change_phys,pE,pN,beta);
     %% Save data
-    Stats(loop,1:1+m+3+3+2) = [f0val fval' change, change_phys, pE pN beta SV];
+    stats(loop,:) = [f0val,fval',change,change_phys,pE,pN,beta];
 end
 runtime = toc(tstart);
 %% Compute BLF
-nevals = 6;
-pE = 6;
-pS = 6;
+load(variables, 'nevals');
 % Compute linear stiffness
 sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);
 K = sparse(iK,jK,sK); K = (K+K')/2;
@@ -281,10 +266,11 @@ KNL = sparse(iK,jK,sG); KNL = (KNL+KNL')/2;
 mu = diag(evals);
 lambda = 1./mu;
 %% Save
-name = sprintf('%s.mat', domain);
-destin_dir = 'data/compliance_reference';
-mfile = fullfile(destin_dir, name);
-dat = struct('sizex', sizex, 'sizey', sizey, 'helem', helem, ...
-    'volfrac', volfr, 'rmin', rmin, ...
-    'xPhys', xPhys, 'x', x, 'lambda', lambda');
-save(mfile, '-struct', 'dat');
+% name = sprintf('%s.mat', domain);
+% destin_dir = 'data/compliance_reference';
+% mfile = fullfile(destin_dir, name);
+save('results.mat', ...
+    'INPVARS', 'DOMVARS', ...
+    'xPhys', 'xTilde', 'x', 'lambda');
+
+fprintf('\nFinished job at %s \n', datestr(datetime('now')));

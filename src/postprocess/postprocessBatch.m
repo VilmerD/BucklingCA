@@ -1,20 +1,17 @@
 %% Given a design computes blf, volume fraction, compliance etc
 % Assuming square elements (ie L = H)
 % Define data (temporary)
-farm = 'ref8';
-jobnums = 0:8;
+farm = 'rom15';
+jobnums = 0:7;
 %% Extract design data
-pool = gcp;
-if isempty(pool); pool = parpool(6); end
 datmat_des = struct('VF', {}, 'C', {}, 'L', {}, 'pL', {}, 'Ls', {});
 datmat_wrk = struct('nIts', {}, 'nFact', {}, 'nCA', {}, 'nTri', {}, ...
-    'tsol', {}, 'wT', {}, 'wTT', {}, 'runtime', {});
-parfor (k = 1:numel(jobnums), pool)
+    'tsol', {}, 'wT', {}, 'wTT', {});
+for k = 1:numel(jobnums)
     jobk = sprintf('job_%i', jobnums(k));
-    datfile_inp = fullfile('processed_data/batches', farm, jobk, 'input.mat');
-    datfile_res = fullfile('processed_data/batches', farm, jobk, 'results.mat');
-    datmat_des(k) = evaluateDesign(datfile_inp, datfile_res);
-    datmat_wrk(k) = evaluateOpt(datfile_inp, datfile_res);
+    datfile_res = fullfile('processed_data', farm, jobk, 'results.mat');
+    datmat_des(k) = evaluateDesign(datfile_res);
+    datmat_wrk(k) = evaluateOpt(datfile_res);
 end
 
 %% Save data

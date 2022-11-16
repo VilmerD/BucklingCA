@@ -55,11 +55,13 @@ for e = 1:nelem
     % Assign voids
     % No voids in the current representation of the column
     % Assign solids (for loaded and supported regions)
-    % Assign non-Neumann borders (for augmented PDE filter) [left bottom right top]
+%   if (x_cent>sizex-helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,5:6) = [2 0]; end
+% 	if (x_cent<helem && y_cent>sizey/2-l_load/2 && y_cent<sizey/2+l_load/2); T(e,5:6) = [2 0]; end
+    % Assign non-Neumann borders (for augmented PDE filter)
     % 0 = Neumann (supports, load)
     % 1 = Robin BCs with l_s=l_o (free faces)
     % 2 = xi_corner (Dirichlet-like)
-    % Default is Neumann 
+    % Default is Neumann [left bottom right top]
     if (x_cent-dx/2<100*eps);          T(e,09) = 1; end    % left face
     if (y_cent-dy/2<100*eps);          T(e,10) = 1; end    % bottom face
     if (x_cent+dx/2-sizex>-100*eps);   T(e,11) = 1; end    % right face
@@ -99,7 +101,7 @@ supdofs1 = [2*supnodes1-1; 2*supnodes1];     % Support in y and y
 % Supports at right end with x=sizex and y=sizey/2+-l_load
 supnodes2 = bitand(...
     abs(X(:,1)-sizex)-0             <100*eps, ...
-    abs(X(:,2)-sizey/2)-loadL/2     <100*eps);
+    abs(X(:,2)-sizey/2)-suppL/2     <100*eps);
 supnodes2 = find(supnodes2);
 supdofs2 = 2*supnodes2;     % Support only y
 supdofs = unique([supdofs1;supdofs2]);

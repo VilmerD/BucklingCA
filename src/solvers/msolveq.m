@@ -1,16 +1,15 @@
-function [x, b, varargout] = msolveq(A, b, bc, Rold, Pold, Aold, s)
+function [x, b, varargout] = msolveq(A, b, bc, Rold, Pold, dA, s)
 % [x, b, R] = MSOLVEQ(A, b, bc) solves the linear system of equations 
-% A*x = b with boundary conditions bc. Q are the reaction forces and R is
-% the cholesky factorization of the free part of K.
+% A*x = b with boundary conditions bc. b are the reaction forces and Rold is
+% the cholesky factorization of the free part of A.
 %
 % [x, b, R] = MSOLVEQ(A, b, bc, R, P) solves the linear system of equations 
 % where R is the cholesky factorization of A with permutation matrix P.
 %
-% [x, b, U, T, R, V] = MSOLVEQ(A, b, bc, Rold, Aold, s) approximates the 
-% solution u to the linear system of equations using CA. Kold is the 
-% stiffness matrix corresponding to the cholesky facotorization R. s 
-% orthonormal basis vectors are computed using CASBON
-%
+% [x, b, U, T, R, V] = MSOLVEQ(A, b, bc, Rold, dA, s) approximates the 
+% solution u to the linear system of equations using CA. dA are the changes 
+% in A since the last cholesky facotorization R. s A-orthonormal basis 
+% vectors are computed using CASBON
 
 % If bc is empty just solve directly
 if isempty(bc)
@@ -47,11 +46,11 @@ if nargin <= 5
         Rcurr = Rold;
         Pcurr = Pold;
     end
-    xf = Pcurr*(Rcurr\(Rcurr'\(Pcurr'*bf)));
+    xf = Pcurr*mldivide(Rcurr, mldivide(Rcurr', Pcurr'*bf));
     varargout = {Rcurr, Pcurr};
 else
     % Using CA
-    [V, U, T, R] = CASBON(A(nf, nf), bf, Rold, Pold, Aold(nf, nf), s);
+    [V, U, T, R] = CASBON(A(nf, nf), bf, Rold, Pold, dA(nf, nf), s);
     xf = V*(V'*bf);
     varargout = {U, T, R, V};
 end

@@ -1,17 +1,17 @@
-function [X, L, varargout] = meigenSM(A, B, bc, ne, Rold, Pold, Bold, Xold, s, options)
+function [X, L, varargout] = meigenSM(A, B, bc, ne, Rold, Pold, dB, Xold, s, ...
+    orthotype, orthovecs)
 % [X, L] = MEIGENSM(A, B, bc, ne) finds the first ne eigenvalues to the 
 % generalized eigenvalue problem (A+l*B)x = 0 with homogeneous boundary 
 % conditions bc
 %
 % [X, L, R, P] = MEIGENSM(A, B, bc, ne) finds the first ne eigenvalues to the 
 % generalized eigenvalue problem and returns R, the cholesky factorization 
-% of the free part of K
+% of the free part of A
 %
-% [X, L, d, B] = MEIGENSM(A, B, bc, ne, Rold, Bold, Xold, s, options)
-% finds the first ne eigenvalues using CA. Kold is the stiffness matrix
-% corresponding to the factorization R and the eigenmodes psi0. CA uses s
-% basis vectors to compute the eigenvalues, and options is a struct
-% containing information for the CA procedure. The basis vectors for the
+% [X, L, d, B] = MEIGENSM(A, B, bc, ne, Rold, dB, Xold, s, options)
+% finds the first ne eigenvalues using CA. dB is the change in B
+% corresponding to the factorization Rold and the eigenmodes Xold. CA uses s
+% basis vectors to compute the eigenvalues. The basis vectors for the
 % reduced order model are computed using CAeigs.
 %
 
@@ -27,24 +27,30 @@ if nargin <= 6
     % Solve the problem using cholesky factorization
     if nargin < 6
         [Rcurr, ~, Pcurr] = chol(Aff, 'matrix');
+    elseif nargin == 5
+        % No permutation matrix is given, assume no permutation
+        Rcurr = Rold;
+        Pcurr = speye(size(Rcurr));
     else
+        % Both cholesky and P is given, just rename
         Rcurr = Rold;
         Pcurr = Pold;
     end
+    % Since eigs requires 'vector' style of P, but 'matrix' is used
+    % elsewhere we must transform, which is easily done using find
     [pcurr, ~, ~] = find(Pcurr);
+    % Solve using eigs
     [Pf, L] = eigs(Aff, Rcurr, ne, 'largestreal', ...
-        'IsCholesky', true, 'CholeskyPermutation', pcurr, ...
+        'IsCholesky', true, ....
+        'CholeskyPermutation', pcurr, ...
         'Display', false);
-    
-    % Normalize with respect to the mass matrix
-    Pf = Pf./sqrt(dot(Pf, Bff*Pf));
     
     % Typically the user wants the cholesky factorization
     varargout = {Rcurr, Pcurr};
 else
     % Solve the problem using a reduced order model if the proper
     [Pf, L, d, B] = CAeigs(Aff, Bff, ne, Rold, Pold, ...
-        Bold(dofsfree, dofsfree), Xold(dofsfree, :), s, options);
+        dB(dofsfree, dofsfree), Xold(dofsfree, :), s, orthotype, orthovecs);
     varargout = {d, B};
 end
 
