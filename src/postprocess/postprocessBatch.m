@@ -10,8 +10,10 @@ datmat_wrk = struct('nIts', {}, 'nFact', {}, 'nCA', {}, 'nTri', {}, ...
 for k = 1:numel(jobnums)
     jobk = sprintf('job_%i', jobnums(k));
     datfile_res = fullfile('processed_data', farm, jobk, 'results.mat');
-    datmat_des(k) = evaluateDesign(datfile_res);
-    datmat_wrk(k) = evaluateOpt(datfile_res);
+    if isfile(datfile_res)
+        datmat_des(k) = evaluateDesign(datfile_res);
+        datmat_wrk(k) = evaluateOpt(datfile_res);
+    end
 end
 
 %% Save data

@@ -17,13 +17,9 @@ tstart = tic;
 if isfile(fullfile(cd, 'input.mat'))
     variables = 'input.mat';
 else
-    variables = 'data/default_data.mat';
+    variables = 'data/test_data.mat';
 end
 INPVARS = load(variables);
-%% Material properties
-Emax = 2e5;
-Emin = Emax*1e-6;
-nu = 0.3;
 %% Prepare design domain
 % X = nodal coordinates
 % T = element connectivity and data
@@ -36,28 +32,30 @@ genfun = str2func(sprintf('generate_%s', INPVARS.domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = genfun(...
     DOMVARS.sizex,DOMVARS.sizey,helem,0);
 %% Initialize optimization
-minloop = 55;                                       % minimum number of loops
-maxloop = 100;
+load(variables, 'minloop', 'maxloop')
 
-pE = 3;                                             % SIMP penalty for linear stiffness
-pS = 3;                                             % SIMP penalty for stress stiffness
-pphysmax = 6;                                       % maximum penalization
-dpphys = 0.50;                                      % change in penalty
-pjumps = (pphysmax - pE)/dpphys;
+load(variables, 'pphysstart', 'pphysend', 'dpphys')
+contsteps = ceil((pphysend-pphysstart)/dpphys);
+pE = pphysstart;
+pS = pphysstart;
 
-pN = 32;                                             % p-norm for eigenvalues
-pNmax = 32;
-dpN = 0;
+load(variables, 'pNstart', 'pNend');
+dpN = (pNend - pNstart)/contsteps;
+pN = pNstart;
 
-beta = 6;                                           % thresholding steepness
-betamax = 6;
-dbeta = 0;
+load(variables, 'betastart', 'betaend');
+dbeta = (betaend - betastart)/contsteps;
+beta = betastart;
 
-jumpnext = 10;                                              % next jump loop
-pace = (minloop-jumpnext)/pjumps;                           % update pace
+load(variables, 'contstart')
+pace = (minloop-contstart)/contsteps;
+contnext = contstart;
 
 loop = 0;
 stats = zeros(minloop,7);
+%% Material properties
+load(variables, 'mpara');
+Emin = mpara(1); Emax = mpara(2); nu = mpara(3);
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -88,8 +86,7 @@ BNL = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 1/2 0 1/2 0 -1/2
     0 -1/2 0 -1/2 0 1/2 0 1/2];          % BNL matrix
 %% Prepare augmented PDE filter (with Robin BC)
-load(variables, 'rmin');
-xi = 1;                     % default for Robin BC (ratio l_s/l_o)
+load(variables, 'rmin', 'xi');
 xi_corner = xi;             	% large xi near re-entrant corner
 l_o = rmin/2/sqrt(3);       % bulk length scale parameter
 l_s = l_o*xi;               % default surface length scale parameter
@@ -157,7 +154,7 @@ xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
     (tanh(beta*0.5)+tanh(beta*(1-0.5)));
 %% Start iteration
 while (...
-        (loop < jumpnext ...
+        (loop < minloop ...
         || CONTINUATION_ONGOING ...
         || change_phys > 5e-2 ...
         )...
@@ -166,20 +163,20 @@ while (...
     %% Continuation
     loop = loop + 1;
     CONTINUATION_ONGOING = ...
-        pE < pphysmax...
-        || pN < pNmax ...
-        || beta < betamax;
+        pE < pphysend ...
+        || pN < pNend ...
+        || beta < betaend;
     CONTINUATION_UPDATE = ...
         CONTINUATION_ONGOING ...
-        && loop >= jumpnext;
+        && loop >= contnext;
     if CONTINUATION_UPDATE
-        jumpnext = loop + pace;
-        if pE == pphysmax
-            beta = min(betamax, beta + dbeta);
+        contnext = loop + pace;
+        if pE == pphysend && pN == pNend
+            beta = min(betaend, beta + dbeta);
         end
-        pN = min(pNmax,     pN + dpN);
-        pE = min(pphysmax,  pE + dpphys);
-        pS = min(pphysmax,  pS + dpphys);
+        pN = min(pNend,     pN + dpN);
+        pE = min(pphysend,  pE + dpphys);
+        pS = min(pphysend,  pS + dpphys);
     end
     %% Solve static equation
     sK = reshape(KE(:)*(Emin+(xPhys').^pE*(Emax-Emin)),64*nelem,1);

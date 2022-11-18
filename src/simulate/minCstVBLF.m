@@ -16,16 +16,13 @@ profile on;
 if isfile(fullfile(cd, 'input.mat'))
     variables = 'input.mat';
 else
-    variables = 'data/default_data.mat';
+    variables = 'data/test_data.mat';
 end
 fprintf('Input variables: \n');
 details(load(variables));
-%% Optimization parameters
-load(variables, 'nevals');                         % number of eigenvalues to consider
-savefile = 'results.mat';
 %% Domain size and discretization
 % element size (all elements are square)
-load(variables, 'helem', 'domain');
+load(variables, 'domain', 'helem');
 %% Prepare design domain
 % X = nodal coordinates
 % T = element connectivity and data
@@ -36,33 +33,35 @@ load(domaindata, 'sizex', 'sizey', 'volfrac');
 % Generate geometry
 geometry_generation = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = geometry_generation(sizex,sizey,helem,0);
+%% Optimization parameters
+load(variables, 'nevals');                         % number of eigenvalues to consider
+savefile = 'results.mat';
 %% Target blf
-comp_ref = sprintf('%sB.mat', domain);
-load(fullfile('data/compliance_reference', comp_ref), 'lambda');
+compref = fullfile('data/compliance_reference', sprintf('%s.mat', domain));
+load(compref, 'lambda');
 lamstar = lambda(1);        % Critical blf
 load(variables, 'sf');      % Target blf is safety factor * critical blf
 lamstar = lamstar*sf;
 mustar = 1/lamstar;
 %% Initialize optimization
-minloop = 270;                                      % minimum number of loops
-maxloop = 350;
+load(variables, 'minloop', 'maxloop')
 
-pE = 2;                                             % SIMP penalty for linear stiffness
-pS = 2;                                             % SIMP penalty for stress stiffness
-pphysmax = 6;                                       % maximum penalization
-dpphys = 0.25;                                      % change in penalty
-psteps = ceil((pphysmax-pE)/dpphys);
+load(variables, 'pphysstart', 'pphysend', 'dpphys')
+contsteps = ceil((pphysend-pphysstart)/dpphys);
+pE = pphysstart;
+pS = pphysstart;
 
-pN = 8;                                             % p-norm for eigenvalues
-pNmax = 32;
-dpN = (pNmax - pN)/psteps;
+load(variables, 'pNstart', 'pNend');
+dpN = (pNend - pNstart)/contsteps;
+pN = pNstart;
 
-beta = 6;                                           % thresholding steepness
-betamax = 6;
-dbeta = 0;
+load(variables, 'betastart', 'betaend');
+dbeta = (betaend - betastart)/contsteps;
+beta = betastart;
 
-jumpnext = 30;                                      % next jump loop
-pace = (minloop-jumpnext)/psteps;                   % update pace
+load(variables, 'contstart')
+pace = (minloop-contstart)/contsteps;
+contnext = contstart;
 
 loop = 0;
 %% Allocate some data to track solution
@@ -88,8 +87,8 @@ CAorthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
 load(variables, 'CA_START', 'CHOL_UPDATE_PACE', 'CA_ANG_TOL')
 %% Initialize figure
-nc = 2;
-nr = 2;
+nc = 1;
+nr = 3;
 load(variables, 'SHOW_DESIGN')
 if SHOW_DESIGN
     fig = figure(...
@@ -103,16 +102,15 @@ if SHOW_DESIGN
             hold(ax(i), 'on');
             axis(ax(i), 'off');
             axis(ax(i), 'tight');
-            colormap(ax(i), 'winter');
+            colormap(ax(i), 'summer');
             pause(0.05);
         end
     end
     set(fig, 'Units', 'Points', 'Position', [100, 100, sizex*nc, sizey*nr])
 end
 %% Material properties
-Emax = 2e5;
-Emin = Emax*1e-6;
-nu = 0.3;
+load(variables, 'mpara');
+Emin = mpara(1); Emax = mpara(2); nu = mpara(3);
 %% Prepare FEA (88-line style)
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
@@ -143,9 +141,8 @@ BNL = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 1/2 0 1/2 0 -1/2
     0 -1/2 0 -1/2 0 1/2 0 1/2];          % BNL matrix
 %% Prepare augmented PDE filter (with Robin BC)
-load(variables, 'rmin');
-xi = 1;                     % default for Robin BC (ratio l_s/l_o)
-xi_corner = xi;             	% large xi near re-entrant corner
+load(variables, 'rmin', 'xi');
+xi_corner = xi;             % large xi near re-entrant corner
 l_o = rmin/2/sqrt(3);       % bulk length scale parameter
 l_s = l_o*xi;               % default surface length scale parameter
 % PDE filter stiffness matrix
@@ -186,16 +183,28 @@ bc = (1:ndof)';
 bc(freedofs) = [];
 bc(:, 2) = 0;
 %% Initialize MMA
-m               = 2;                    % number of general constraints.
-n               = nelem;                % number of design variables x_j.
-mmalen          = 0.200;                % maximum change every design update
-xmin            = 1e-6*ones(n,1);       % column vector with the lower bounds for the variables x_j.
-xmin(solids)    = 1-1e-3;               % lower bound for solids
-xmax            = 1e+0*ones(n,1);       % olumn vector with the upper bounds for the variables x_j.
-xmax(voids)     = 1e-3;                 % upper bound for voids
-x               = 0.55*ones(n, 1);
+% Initial guess
+load(variables, 'x0strat');
+switch lower(x0strat)
+    case 'homg'
+        x = ones(nelem, 1);
+    case 'comp'
+        load(compref, 'xPhys')
+        x = xPhys;
+        clear xPhys;
+    case 'rand'
+        x = rand([nelem, 1]);
+    otherwise
+        x = 0.50*ones(nelem, 1);
+end
+
 xold1           = x;                    % xval, one iteration ago (provided that iter>1).
 xold2           = x;                    % xval, two iterations ago (provided that iter>2).
+m               = 2;                    % number of general constraints.
+n               = nelem;                % number of design variables x_j.
+mmalen          = 0.100;                % maximum change every design update
+xmin            = 0.00*ones(n,1);       % column vector with the lower bounds for the variables x_j.
+xmax            = 1e+0*ones(n,1);       % column vector with the upper bounds for the variables x_j.
 low             = 0*ones(n,1);          % column vector with the lower asymptotes from the previous iteration (provided that iter>1).
 upp             = ones(n,1);            % column vector with the upper asymptotes from the previous iteration (provided that iter>1).
 a0              = 1;                    % the constants a_0 in the term a_0*z.
@@ -208,6 +217,7 @@ chg_mma         = inf;
 chg_rms         = inf;
 loop_chol       = loop;
 
+
 % Compute initial density field
 xTilde = filter(x);
 xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
@@ -215,26 +225,26 @@ xPhys = (tanh(beta*0.5)+tanh(beta*(xTilde-0.5)))/...
 %% Start iteration
 while ((loop < minloop ...
         || CONTINUATION_ONGOING ...
-        || chg_phs > 5e-2 ...
+        || chg_phs > 1e-2 ...
         ) || fval(1,1) > 1e-3 || fval(2,1) > 1e-3) ...
         && loop < maxloop
     %% Continuation
     loop = loop + 1;
     CONTINUATION_ONGOING = ...
-        pE < pphysmax...
-        || pN < pNmax ...
-        || beta < betamax;
+        pE < pphysend...
+        || pN < pNend ...
+        || beta < betaend;
     CONTINUATION_UPDATE = ...
         CONTINUATION_ONGOING ...
-        && loop >= jumpnext;
+        && loop >= contnext;
     if CONTINUATION_UPDATE
-        jumpnext = loop + pace;
-        if pE == pphysmax
-            beta = min(betamax, beta + dbeta);
+        contnext = loop + pace;
+        if pE == pphysend && pN == pNend
+            beta = min(betaend, beta + dbeta);
         end
-        pN = min(pNmax,     pN + dpN);
-        pE = min(pphysmax,  pE + dpphys);
-        pS = min(pphysmax,  pS + dpphys);
+        pN = min(pNend,     pN + dpN);
+        pE = min(pphysend,  pE + dpphys);
+        pS = min(pphysend,  pS + dpphys);
     end
     %% Conditions for CA solve
     SOLVE_EXACTLY = ...
@@ -498,10 +508,11 @@ if SHOW_DESIGN
     pause(2.00); saveas(gcf, 'design.png'); pause(2.00);
 end
 % Save results
+DOMVARS = load(domaindata);
 INPVARS = load(variables);
 save('results.mat', ...
     'xPhys', 'xTilde', 'x', 'stats', 'tsol', 'profile_data',...
-    'INPVARS', 'T', ...
+    'INPVARS', 'DOMVARS', 'T', ...
     'res_stat', 'mag_stat', ...
     'res_eigs', 'mag_eigs', ...
     'res_adjt', 'mag_adjt');

@@ -6,10 +6,10 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-loadL = 0.01*sizey;             % distribution length for point load
+loadL = 1/30*sizey;             % distribution length for point load
 suppH = 1.00*sizex;             % Distance from middle line to supports
-suppL = 0.01*sizey;             % Length of support
-neumL = 8.00*suppL;             % Length of boundary with neumann conditions at supports
+suppL = 1/30*sizey;             % Length of support
+neumL = 2.00*suppL;             % Length of boundary with neumann conditions at supports
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);
 nodelist(:,1) = Xnode(:);
@@ -86,13 +86,24 @@ solids = find(T(:,5)==2);   % find solid elements
 voids = find(T(:,5)==1);   % find void elements
 
 % Load at right end with x=sizex and y=sizey/2+-l_load
-loadednodes = bitand(...
-    abs(X(:,1)-sizex)-0 <100*eps, ...
-    abs(X(:,2)-sizey/2)-loadL <100*eps);
-loadednodes = find(loadednodes);
-loadeddofs = 2*loadednodes;
-loadmag = 1e4/numel(loadeddofs);
-F = sparse(loadeddofs,1,loadmag,2*size(nodelist,1),1);
+f0 = 1e4*helem;
+loadednodes1 = bitand(...
+    abs(X(:,1)-sizex)-0             <100*eps, ...
+    abs(X(:,2)-sizey/2)-loadL/2     <100*eps);
+loadednodes1 = find(loadednodes1);
+loadeddofs1 = 2*loadednodes1;               % Force only in y
+load1 = f0*ones(size(loadeddofs1));
+loadednodes2 = bitand(....
+    abs(X(:,1)-sizex)-0               <100*eps, ...
+    bitor(...
+        abs(X(:,2)-sizey/2-loadL/2-dy)-dy/2  <100*eps, ...
+        abs(X(:,2)-sizey/2+loadL/2+dy)-dy/2  <100*eps));
+loadednodes2 = find(loadednodes2);
+loadeddofs2 = 2*loadednodes2;
+load2 = (f0/2)*ones(size(loadeddofs2));
+loadeddofs = [loadeddofs1; loadeddofs2];
+load = [load1; load2];
+F = sparse(loadeddofs,1,load,2*size(nodelist_clean,1),1,numel(loadeddofs));
 
 % Supports
 if (1<0)
@@ -118,17 +129,16 @@ if (doplot)
     hold on;
     axis equal
     axis tight
-    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o');
-    % Plot supports in x and y
+    plot(nodelist_clean(:,1),nodelist_clean(:,2),'o', 'Markersize', 1);
+    % Plot supports and loads in x and y
     supnodesx = (supdofs(logical(mod(supdofs, 2)))+1)/2;
-    plot(X(supnodesx, 1), X(supnodesx, 2), 'b>');
+    plot(X(supnodesx, 1), X(supnodesx, 2), 'b>', 'Markersize', 6);
     supnodesy = supdofs(logical(mod(supdofs-1, 2)))/2;
-    plot(X(supnodesy, 1), X(supnodesy, 2), 'b^');
-    % Plot laoded nodes in x and y
+    plot(X(supnodesy, 1), X(supnodesy, 2), 'b^', 'Markersize', 6);
     loadednodesx = (loadeddofs(logical(mod(loadeddofs, 2)))+1)/2;
-    plot(X(loadednodesx, 1), X(loadednodesx, 2), 'r>');
+    plot(X(loadednodesx, 1), X(loadednodesx, 2), 'r>', 'Markersize', 4);
     loadednodesy = loadeddofs(logical(mod(loadeddofs-1, 2)))/2;
-    plot(X(loadednodesy, 1), X(loadednodesy, 2), 'r^');
+    plot(X(loadednodesy, 1), X(loadednodesy, 2), 'r^', 'Markersize', 4);
     
     % Plot elements
     figure;

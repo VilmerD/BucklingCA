@@ -6,7 +6,7 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_column(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-loadL = 0.04*sizey;             % distribution length for point load
+loadL = 1/30*sizey;             % distribution length for point load
 suppL = 1.00*loadL;
 neumL = 2.00*suppL;
 %% Create nodal grid for FEA and optimization
@@ -82,12 +82,23 @@ solids = find(T(:,5)==2);   % find solid elements
 voids = find(T(:,5)==1);    % find void elements
 
 % Load at right end with x=sizex and y=sizey/2+-l_load
-loadednodes = bitand(...
+f0 = -1e4*helem;
+loadednodes1 = bitand(...
     abs(X(:,1)-sizex)-0             <100*eps, ...
-    abs(X(:,2)-sizey/2)-loadL/2    <100*eps);
-loadednodes = find(loadednodes);
-loadeddofs = 2*loadednodes-1;               % Force only in y
-load = -1e4/numel(loadeddofs)*ones(size(loadeddofs));
+    abs(X(:,2)-sizey/2)-loadL/2     <100*eps);
+loadednodes1 = find(loadednodes1);
+loadeddofs1 = 2*loadednodes1-1;               % Force only in y
+load1 = f0*ones(size(loadeddofs1));
+loadednodes2 = bitand(....
+    abs(X(:,1)-sizex)-0               <100*eps, ...
+    bitor(...
+        abs(X(:,2)-sizey/2-loadL/2-dy)-dy/2  <100*eps, ...
+        abs(X(:,2)-sizey/2+loadL/2+dy)-dy/2  <100*eps));
+loadednodes2 = find(loadednodes2);
+loadeddofs2 = 2*loadednodes2-1;
+load2 = (f0/2)*ones(size(loadeddofs2));
+loadeddofs = [loadeddofs1; loadeddofs2];
+load = [load1; load2];
 F = sparse(loadeddofs,1,load,2*size(nodelist_clean,1),1,numel(loadeddofs));
 
 % Supports at left end with x=0 and y=sizey/2+-l_load

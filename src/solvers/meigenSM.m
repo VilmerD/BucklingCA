@@ -49,9 +49,9 @@ if nargin <= 6
     varargout = {Rcurr, Pcurr};
 else
     % Solve the problem using a reduced order model if the proper
-    [Pf, L, d, B] = CAeigs(Aff, Bff, ne, Rold, Pold, ...
+    [Pf, L, B] = CAeigs(Aff, Bff, ne, Rold, Pold, ...
         dB(dofsfree, dofsfree), Xold(dofsfree, :), s, orthotype, orthovecs);
-    varargout = {d, B};
+    varargout = {B};
 end
 
 % Sorting eigenvalues in ascending order
