@@ -1,4 +1,4 @@
-function [X, L, V_INTR] = CAeigs(A, B, n, Rold, Pold, dB, Xold, s, orthotype, ...
+function [X, L] = CAeigs(A, B, n, Rold, Pold, dB, Xold, s, orthotype, ...
     orthovecs)
 % CAeigs(A, B, n, Rold, Pold, Bold, Xold, s, options) finds the n eigenparis of the
 % generalized eigenvalue problem correspodning to the n eigenvalues with
@@ -23,7 +23,6 @@ if numel(s) == 1; s = s*ones(n, 1); else; s = s(1:n); end
 
 X = zeros(size(A, 1), n);
 L = zeros(n, n);
-V_INTR = cell(n, 4);
 for k = 1:n
     % Choose if orthogonalization is to be used and which vectors to
     % orthogonalize with respect to
@@ -37,7 +36,7 @@ for k = 1:n
     end
     
     % Generate basis vectors
-    [Vk, Uk, Tk] = CAEEON(A, B, Rold, Pold, dB, Xold(:, k), s(k), XO);
+    Vk = CAEEON(A, B, Rold, Pold, dB, Xold(:, k), s(k), XO);
     
     % Compute reduced model
     A_RED = Vk'*A*Vk;
@@ -55,10 +54,6 @@ for k = 1:n
     % Insert solution
     X(:, k) = X_FULL;                             
     L(k, k) = L_RED;
-    V_INTR(k, :) = {Uk, Tk, Vk, X_RED};
-    
-    % Compute the residual of the eigenproblem
-%     d(k) = norm(A*X_FULL - L_RED*B*X_FULL)/norm(A*X_FULL);
 end
 
 end

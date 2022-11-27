@@ -1,20 +1,23 @@
 %% Given a design computes blf, volume fraction, compliance etc
-% Assuming square elements (ie L = H)
-% Define data (temporary)
-farm = 'rom15';
-jobnums = 0:7;
-%% Extract design data
-datmat_des = struct('VF', {}, 'C', {}, 'L', {}, 'pL', {}, 'Ls', {});
+farm = 'ref010';
+
+source_dir = fullfile('processed_data/', farm);
+
+datmat_des = struct('VF', {}, 'C', {}, 'L', {}, 'pL', {});
 datmat_wrk = struct('nIts', {}, 'nFact', {}, 'nCA', {}, 'nTri', {}, ...
     'tsol', {}, 'wT', {}, 'wTT', {});
-for k = 1:numel(jobnums)
-    jobk = sprintf('job_%i', jobnums(k));
-    datfile_res = fullfile('processed_data', farm, jobk, 'results.mat');
-    if isfile(datfile_res)
-        datmat_des(k) = evaluateDesign(datfile_res);
-        datmat_wrk(k) = evaluateOpt(datfile_res);
+
+nj = numel(dir(fullfile(source_dir, 'job_*')));
+for k = 0:nj-1
+    jobdir = fullfile(source_dir, sprintf('job_%i', k));
+    if isfile(fullfile(jobdir, 'results.mat'))
+        datmat_des(k+1) = evaluateDesign(jobdir);
+        datmat_wrk(k+1) = evaluateOpt(jobdir);
     end
+
+    if ~mod(k, nj/10); fprintf('%%'); end
 end
+fprintf("\n");
 
 %% Save data
 destindir = 'processed_data/processed_batches/';

@@ -6,12 +6,12 @@
 #SBATCH --mem-per-cpu=6200
 #
 # job time, change for what your job farm requires
-#SBATCH -t 06:00:00
+#SBATCH -t 04:00:00
 #
 # job name and output file names
 #SBATCH -J jobFarm
-#SBATCH -o res_jobFarm_%j.out
-#SBATCH -e res_jobFarm_%j.out
+#SBATCH -o master_%j.out
+#SBATCH -e master_%j.err
 cat $0
 
 # set the number of jobs - change for your requirements
@@ -21,7 +21,7 @@ export NB_of_jobs=3
 
 for ((i=0; i<$NB_of_jobs; i++))
 do
-    srun -Q --exclusive --overlap -n 1 -N 1 worker_script.sh $i &> out_worker_${SLURM_JOB_ID}_${i} &
+    srun -Q --exclusive --overlap -n 1 -N 1 worker_script.sh $i &> worker_${SLURM_JOB_ID}_${i}.out &
     sleep 1
 done
 

@@ -16,7 +16,7 @@ profile on;
 if isfile(fullfile(cd, 'input.mat'))
     variables = 'input.mat';
 else
-    variables = 'data/test_data.mat';
+    variables = 'data/default_data.mat';
 end
 fprintf('Input variables: \n');
 details(load(variables));
@@ -33,17 +33,15 @@ load(domaindata, 'sizex', 'sizey', 'volfrac');
 % Generate geometry
 geometry_generation = str2func(sprintf('generate_%s', domain));
 [X,T,i_img,j_img,solids,voids,F,freedofs] = geometry_generation(sizex,sizey,helem,0);
-%% Optimization parameters
-load(variables, 'nevals');                         % number of eigenvalues to consider
-savefile = 'results.mat';
-%% Target blf
+%% Buckling parameters
+load(variables, 'nevals');          % number of eigenvalues to consider
 compref = fullfile('data/compliance_reference', sprintf('%s.mat', domain));
 load(compref, 'lambda');
-lamstar = lambda(1);        % Critical blf
-load(variables, 'sf');      % Target blf is safety factor * critical blf
-lamstar = lamstar*sf;
+lamstar = lambda(1);                % Critical BLF (Lc)
+load(variables, 'sf');              % Safety factor                
+lamstar = lamstar*sf;               % Target BLF is safety factor * Lc
 mustar = 1/lamstar;
-%% Initialize optimization
+%% Continuation control
 load(variables, 'minloop', 'maxloop')
 
 load(variables, 'pphysstart', 'pphysend', 'dpphys')
@@ -64,7 +62,7 @@ pace = (minloop-contstart)/contsteps;
 contnext = contstart;
 
 loop = 0;
-%% Allocate some data to track solution
+%% Track solution accuracy and work
 stats = zeros(minloop,11+2+nevals);
 tsol = zeros(maxloop, 4);
 res_stat = zeros(minloop, 1);
@@ -82,7 +80,7 @@ SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
 load(variables, 'NBASIS_STAT', 'NBASIS_EIGS', 'NBASIS_ADJT');
 % Orthogonalization type for eigenproblem
-CAorthotype = 'old';
+load(variables, 'CAorthotype');
 CAorthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
 % When CA should be started, and how often to factorize
 load(variables, 'CA_START', 'CHOL_UPDATE_PACE', 'CA_ANG_TOL')
@@ -111,7 +109,7 @@ end
 %% Material properties
 load(variables, 'mpara');
 Emin = mpara(1); Emax = mpara(2); nu = mpara(3);
-%% Prepare FEA (88-line style)
+%% Prepare FEA
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
@@ -142,9 +140,8 @@ BNL = 1/helem*[-1/2 0 1/2 0 1/2 0 -1/2 0
     0 -1/2 0 -1/2 0 1/2 0 1/2];          % BNL matrix
 %% Prepare augmented PDE filter (with Robin BC)
 load(variables, 'rmin', 'xi');
-xi_corner = xi;             % large xi near re-entrant corner
-l_o = rmin/2/sqrt(3);       % bulk length scale parameter
-l_s = l_o*xi;               % default surface length scale parameter
+l_o = rmin/2/sqrt(3);             % bulk length scale parameter
+l_s = l_o*xi;                     % surface length scale parameter
 % PDE filter stiffness matrix
 edofMatF = [(edofMat(:,1)+1)/2 (edofMat(:,3)+1)/2 (edofMat(:,5)+1)/2 (edofMat(:,7)+1)/2];
 KEF = l_o^2*[4 -1 -2 -1; -1  4 -1 -2; -2 -1  4 -1; -1 -2 -1  4]/6 + ...
@@ -169,14 +166,15 @@ sMF = sMF + reshape(ME31(:)*idv,16*nelem,1);
 idv = idv*0; idv(T(:,12)==1) = 1; idv(solids)=0;    % top face
 sMF = sMF + reshape(ME41(:)*idv,16*nelem,1);
 KF = sparse(iKF,jKF,sKF+sMF);
-[LF, FLAG, PF] = chol(KF,'lower', 'matrix');
+[LF, FLAG, PF] = chol(KF, 'lower', 'matrix');       % Using permutation matrix 
 % Transformation Matrix
 iTF = reshape(edofMatF,4*nelem,1);
 jTF = reshape(repmat(1:nelem,4,1)',4*nelem,1);
 sTF = repmat(1/4,4*nelem,1)*helem^2;
 TF = sparse(iTF,jTF,sTF);
-filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;            % actual integration of NdA
-clear('edofMatF', 'iKF', 'jKF', 'sKF', 'sMF', 'KF', 'idv', 'iTF', 'jTF', 'sTF')
+filter = @(x) (TF'*(PF*(LF'\(LF\(PF'*(TF*x(:)))))))/helem^2;
+clear('edofMatF', 'iKF', 'jKF', 'sKF', 'sMF', ...
+    'KF', 'idv', 'iTF', 'jTF', 'sTF')
 
 % BC needed for msolveq and meigen
 bc = (1:ndof)';
@@ -187,11 +185,9 @@ bc(:, 2) = 0;
 load(variables, 'x0strat');
 switch lower(x0strat)
     case 'homg'
-        x = ones(nelem, 1);
+        x = 0.50*ones(nelem, 1);
     case 'comp'
-        load(compref, 'xPhys')
-        x = xPhys;
-        clear xPhys;
+        load(compref, 'x')
     case 'rand'
         x = rand([nelem, 1]);
     otherwise
@@ -202,7 +198,7 @@ xold1           = x;                    % xval, one iteration ago (provided that
 xold2           = x;                    % xval, two iterations ago (provided that iter>2).
 m               = 2;                    % number of general constraints.
 n               = nelem;                % number of design variables x_j.
-mmalen          = 0.100;                % maximum change every design update
+mmalen          = 0.200;                % maximum change every design update
 xmin            = 0.00*ones(n,1);       % column vector with the lower bounds for the variables x_j.
 xmax            = 1e+0*ones(n,1);       % column vector with the upper bounds for the variables x_j.
 low             = 0*ones(n,1);          % column vector with the lower asymptotes from the previous iteration (provided that iter>1).
@@ -276,11 +272,11 @@ while ((loop < minloop ...
         % Compute change in stiffness matrix
         dr = (xPhys.^pE - xPhysold.^pE)*(Emax-Emin);
         sdk = reshape(KE(:)*dr',64*nelem,1);
-        dK = sparse(iK, jK, sdk);
+        dK = sparse(iK, jK, sdk); dK = (dK + dK')/2;
         % Solve using CA
         U = msolveq(K, F, bc, Rold, Pold, dK, NBASIS_STAT);
     end
-    tsol(loop, 2) = toc(tstart_stat) - tsol(loop, 1);
+    tsol(loop, 2) = toc(tstart_stat);
 
     % Compute residuals
     res_stat(loop, 1) = norm(Kf*U(freedofs) - F(freedofs));
@@ -322,12 +318,11 @@ while ((loop < minloop ...
         PHI = evecs./sqrt(dot(evecs, K*evecs));
         PHIold = PHI;
         % Update CA's orthovecs if 'old' option is used
-        if strcmpi(CAorthotype, 'old')
-            CAorthovecs = PHIold(freedofs, :);
-        end
+        CAorthovecs = PHIold(freedofs, :);
     else
         % SOLVE EIGS WITH CA
-        NB = [NBASIS_EIGS*ones(2, 1); 2*ones(nevals-2, 1)];
+%         NB = [NBASIS_EIGS*ones(2, 1); 3*ones(nevals-2, 1)];
+        NB = NBASIS_EIGS;
         [evecs, evals] = meigenSM(-KNL, K, bc, nevals, ...
             Rold, Pold, dK, PHIold, NB, CAorthotype, CAorthovecs);
         PHI = evecs./sqrt(dot(evecs, K*evecs));
@@ -338,7 +333,7 @@ while ((loop < minloop ...
     KNLf = KNL(freedofs, freedofs);
     PHIf = PHI(freedofs, :);
     for k = 1:nevals
-        res_eigs(loop, k) = norm(KNLf*PHIf(:, k) - evals(k)*Kf*PHIf(:, k), 2);
+        res_eigs(loop, k) = norm(-KNLf*PHIf(:, k) - evals(k, k)*Kf*PHIf(:, k), 2);
         mag_eigs(loop, k) = norm(Kf*PHIf(:, k), 2);
     end
 
@@ -372,6 +367,7 @@ while ((loop < minloop ...
         ADJload(edof,:) = ADJload(edof,:) - vals;
     end
     ADJsol = 0*ADJload;
+
     % SOLVE ADJOINTS
     tstart_adjt = tic;
     if SOLVE_EXACTLY || SOLVE_ADJT_EXACTLY
@@ -387,19 +383,13 @@ while ((loop < minloop ...
     else
         % SOLVE ADJOINTS WITH CA
         for k = 1:nevals
-            NBK = NBASIS_ADJT*(k <= 2) + 2*(k > 2);
+%             NBK = NBASIS_ADJT*(k <= 2) + 3*(k > 2);
+            NBK = NBASIS_ADJT;
             ADJsol(:, k) = msolveq(K, ADJload(:, k), bc, ...
                 Rold, Pold, dK, NBK);
         end
     end
     tsol(loop, 4) = toc(tstart_adjt);
-    % Compute residuals
-    ADJsolf = ADJsol(freedofs, :);
-    ADJloadf = ADJload(freedofs, :);
-    for k = 1:nevals
-        res_adjt(loop, k) = norm(Kf*ADJsolf(:, k) - ADJloadf(:, k), 2);
-        mag_adjt(loop, k) = norm(ADJloadf(:, k), 2);
-    end
 
     % Compute sensitivities
     for j = 1:nevals
@@ -409,6 +399,14 @@ while ((loop < minloop ...
     end
     dmucdmu = (mu/mu_max_app)'.^(pN-1);
     dmu_max_app = dmu*dmucdmu';
+    
+    % Compute residuals
+    ADJsolf = ADJsol(freedofs, :);
+    ADJloadf = ADJload(freedofs, :);
+    for k = 1:nevals
+        res_adjt(loop, k) = norm(Kf*ADJsolf(:, k) - ADJloadf(:, k), 2);
+        mag_adjt(loop, k) = norm(ADJloadf(:, k), 2);
+    end
     %% Chain rule for projection and filter
     dxPhys = (1 - (tanh(beta*(xTilde-0.5))).^2)*beta/(tanh(beta*0.5)+tanh(beta*(1-0.5)));
     dv          = filter(dv.*dxPhys);
@@ -448,15 +446,15 @@ while ((loop < minloop ...
             text(ax(k), xt, yt, tit, ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'top');
-            % To make sure plots are right size and in order
-            pause(0.05);
+
+            pause(0.05);                    % To make sure plots are right size and in order
         end
         drawnow;
     end
     %% MMA
     xval  = x;
     if (loop==1)
-        scale = 100/comp;
+        scale = 10/comp;
     end
     f0val = scale*comp;
     df0dx = scale*dc;
@@ -501,6 +499,7 @@ while ((loop < minloop ...
     %% Save data
     stats(loop,1:11+m+nevals) = [f0val,fval',lambda',chg_mma,chg_phs,chg_rms,chg_ang,pE,pN,beta,SV];
 end
+%% Save data etc
 runtime = toc(tstart);
 profile_data = profile('info');
 % Save figure

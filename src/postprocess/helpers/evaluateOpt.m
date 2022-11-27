@@ -1,39 +1,36 @@
-function S = evaluateOpt(resfile)
+function S = evaluateOpt(jobdir)
 % Counts number of factorizations etc for solution
-load(resfile, 'stats');
+load(fullfile(jobdir, 'results.mat'), 'stats', 'profile_data', 'tsol');
 
 % Iterations and factorizations
 nIts    = sum(stats(:, 1)  ~=0);
 nFact   = sum(stats(:, end)==1);
 nCA     = nIts - nFact;
 
-load(resfile, 'profile_data');
 fnc_table = profile_data.FunctionTable;
 
-% Triangular solves
-name_msolveq = 'msolveq';
-lines_solveq = 49;
-nTri(1) = countCalls(fnc_table, name_msolveq, lines_solveq);
+%%% Triangular solves %%%
+% lines are the lines in the source code where mldivide is called, this
+% must be done since matlab does not log mldivide on its own
 
-name_casbon = 'CASBON';
-lines_casbon = [9, 18];
-nTri(1) = nTri(1) + countCalls(fnc_table, name_casbon, lines_casbon);
+% for linear equilibrium and adjoints
+nTri(1) = countCalls(fnc_table, 'msolveq', 49);
+nTri(1) = nTri(1) + countCalls(fnc_table, 'CASBON', [11, 19]);
 
-name_caeeon = 'CAEEON';
-lines_caeeon = [12, 24];
-nTri(2) = countCalls(fnc_table, name_caeeon, lines_caeeon);
-
+% for eigenvalueproblem
+nTri(2) = countCalls(fnc_table, 'CAEEON', [11, 22]);
+% the triangular solves in eigs is in a lambda-expression
 trisolver = 'eigs>@(v)solve(dR,permB''*applyA(permB*solve(dR,v,false)),true)';  % name of function
 itrisolver = cellfun(@(n) strcmp(n, trisolver), {fnc_table.FunctionName});      % index in table
 nTri(2) = nTri(2) + fnc_table(itrisolver).NumCalls;         
 
+% total number of trisolves
 nTri(end+1) = sum(nTri);
 
-% Wall - time
-load(resfile, 'tsol');
+% walltime
 wT = sum(tsol, 1);
 
-% Save in struct
+% Save data
 datnames = {'nIts', 'nFact', 'nCA', 'nTri', 'tsol', 'wT', 'wTT'};
 datvals = {nIts, nFact, nCA, nTri, tsol, wT, sum(wT)};
 S = cell2struct(datvals, datnames, 2);

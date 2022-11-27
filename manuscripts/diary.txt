@@ -1,0 +1,29 @@
+Starting a sort of diary for making notes on progress
+
+%%%%% Tuesday 22/11 2022 %%%%%
+Continuing work on boundary conditions for geometries. Discovered mistake in the twobar generation so I had to rerun the compliance reference.
+My theory for the oscillating BLF's is that the filter radius of 2 is too small, so I'm reverting to 3 (and rerunning compliance reference).
+I also think that the p-norm continuation made the ROM suffer so the setup is now continuation 8->16. My last thought is that maybe ramping a bit slower might help.
+
+I also fixed a mistake made when computing the residuals in minCstVBLF.m.
+
+%%%%% Wednesday 23/11 2022 %%%%%
+Discovered a huge mistake in CAEEON where the orthogonalization was incorrect, resulting in basis vectors not orthogonal to lower order eigenmodes, which made the orthogonalization redundant.
+I fixed said issue and started working on new simulations. I changed the scaling of the objective function because i suspect it made MMA upset. I will see tomorrow morning the results.
+I continued working on the manuscript for the paper
+
+%%%%% Thursday 24/11 2022 %%%%%
+Results look a lot better, but the column isn't finding a minima, so I increased the safety-factor to 2.50.
+Now I realize I changed the bc's without rerunning the compliance reference. Changing back looked good, initially. Rerunning for multiple sf's and stuff.
+
+%%%%% Friday 25/11 2022 %%%%%
+Results look good now. There was appearantly a big difference starting with a homogenous and the compliance optimized initial guess (ie compopt was better for large safetyfactors).
+Results show that we get the same design, and very good results for the spire and twobar but not as good for the column, in terms of end design and similarity to reference.
+Residuals show that the column is struggling but the other two are fine. This is reflected in the plots of the buckling factors also.
+I'm actually rerunning the batches because i forgot to threshold the compliance reference, but I expect similar results.
+
+Maybe we need additional basis vectors for the column, or it's just a harder problem.
+On second thought, the column case does have more local minima, maybe this confuses the ROM?
+Is there a good measure for how 'nonconvex' a function is? Or in this case it's rather the space defined by the blf and volume constraint which is nonconvex, the compliance is the same as before.
+
+

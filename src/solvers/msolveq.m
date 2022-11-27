@@ -50,9 +50,8 @@ if nargin <= 5
     varargout = {Rcurr, Pcurr};
 else
     % Using CA
-    [V, U, T, R] = CASBON(A(nf, nf), bf, Rold, Pold, dA(nf, nf), s);
+    V = CASBON(A(nf, nf), bf, Rold, Pold, dA(nf, nf), s);
     xf = V*(V'*bf);
-    varargout = {U, T, R, V};
 end
 
 % Reassembling the solution

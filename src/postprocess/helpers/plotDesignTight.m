@@ -1,4 +1,4 @@
-function fig = plotDesignTight(i_img, j_img, xx, cmap)
+function fig = plotDesignTight(iimg, jimg, xx, cmap)
 % PLOTDESIGNTIGHT(i_img, j_img, xx) plots the design specified in xx with
 % coordinates i_img and j_img
 
@@ -10,13 +10,9 @@ if sum(strcmpi(cmap, {'hot', 'gray'})) > 0
     disp('INVERTING DENSITY FIELD');
     xx = 1-xx;
 end
-% Make figure of correct size
-sizey = max(i_img);
-sizex = max(j_img);
-helem = sqrt(sizex*sizey/numel(xx));
+% Make figure
 fig = figure(...
-    'MenuBar', 'none', ...
-    'Position', [100, 100, sizex, sizey]/helem);
+    'MenuBar', 'none');
 
 % Make axis in figure
 ax = axes(fig);
@@ -26,10 +22,12 @@ ax.Position = [0, 0, 1, 1];
 colormap(ax, cmap);
 axis(ax, 'tight')
 
-% Make image
-dimg = sparse(i_img, j_img, xx);
+dimg = sparse(iimg, jimg, xx);
 
 % Plot on axis
 imagesc(ax, dimg);
-pause(0.50);
+pause(1.00);
+
+% Resize the f**king figure
+fig.Position(3:4) = [max(jimg), max(iimg)];
 end

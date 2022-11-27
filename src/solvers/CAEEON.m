@@ -1,23 +1,21 @@
-function [V, U, T] = CAEEON(A, B, Rold, Pold, dB, Xold, s, XO)
+function V = CAEEON(A, B, Rold, Pold, dB, Xold, s, X)
 % V = CAEEON(A, B, Rold, Bold, Xold, s, XO) computes s basis vectors using CA for
 % the eigenvalue problem (A - l*B)x = 0. R is the cholesky factorization of the 
 % old matrix Bold. Xold are the old eigenvectors and X0 are vectors to which
 % the basis vectors are orthogonalized. 
-% 
-% [V, U, T] = CAEEON(A, B, Rold, Bold, Xold, s, XO) computes the basis vectors and returns the 
-% intermediate basis vectors required for a consistent sensitivity analysis.
-m = size(XO, 2);
+%
+[n, m] = size(X);
+BX = (B*X)./dot(X, B*X, 1);     % Change this so that we don't do BX twice
 
 % Compute first basis vector.
 ui = Pold*mldivide(Rold, mldivide(Rold', Pold'*(A*Xold)));
 ti = ui/sqrt(ui'*B*ui);
 vi = ti;
 for j = 1:m
-    vi = vi - (vi'*A*XO(:, j))*XO(:, j);
+    vi = vi - (ti'*BX(:, j))*X(:, j);
 end
-U = ui;
-T = ti;
-V = vi;
+V = zeros(n, s);
+V(:, 1) = vi;
 
 % Compute remaining basis vectors
 for i = 2:s
@@ -29,11 +27,14 @@ for i = 2:s
     % Orthogonalize
     vi = ti;
     for j = 1:m
-        vi = vi - (vi'*A*XO(:, j))*XO(:, j);
+        vi = vi - (ti'*BX(:, j))*X(:, j);
     end
     
-    U(:, i) = ui;
-    T(:, i) = ti;
     V(:, i) = vi;
 end
 end
+
+%%% NOTES %%%
+% - It's very important that X'*BX is I so that the orthogonalization is
+% correct.
+% - We use Grahm-Schmidt (not modified) since X may not be B-orthogonal
