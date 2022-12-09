@@ -27,7 +27,7 @@ cd $WRK_DIR
 # Start program
 module load matlab/2020b
 
-matlab -singleCompThread -nodesktop -nodisplay -nosplash -r "job; quit" > outfile.txt
+matlab -singleCompThread -nodesktop -nodisplay -nosplash -r "pwd; dir; job; quit" > outfile.txt
 
 # rescue the results back to job directory
 # including any text files or images ending with png

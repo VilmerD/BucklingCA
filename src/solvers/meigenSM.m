@@ -1,5 +1,5 @@
 function [X, L, varargout] = meigenSM(A, B, bc, ne, Rold, Pold, dB, Xold, s, ...
-    orthotype, orthovecs)
+    otype, ovecs)
 % [X, L] = MEIGENSM(A, B, bc, ne) finds the first ne eigenvalues to the 
 % generalized eigenvalue problem (A+l*B)x = 0 with homogeneous boundary 
 % conditions bc
@@ -50,7 +50,7 @@ if nargin <= 6
 else
     % Solve the problem using a reduced order model if the proper
     [Pf, L] = CAeigs(Aff, Bff, ne, Rold, Pold, ...
-        dB(dofsfree, dofsfree), Xold(dofsfree, :), s, orthotype, orthovecs);
+        dB(dofsfree, dofsfree), Xold(dofsfree, :), s, otype, ovecs);
 end
 
 % Sorting eigenvalues in ascending order

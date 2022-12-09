@@ -1,5 +1,5 @@
 %% Copy compliance reference data to destination
-bdir = 'compref004';
+bdir = 'compref006';
 source_dir = fullfile('processed_data/', bdir);
 destin_dir = 'data/compliance_reference';
 for k = 0:2

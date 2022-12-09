@@ -5,7 +5,8 @@ function V = CAEEON(A, B, Rold, Pold, dB, Xold, s, X)
 % the basis vectors are orthogonalized. 
 %
 [n, m] = size(X);
-BX = (B*X)./dot(X, B*X, 1);     % Change this so that we don't do BX twice
+BX = B*X;
+BX = BX./dot(X, BX, 1);     % Change this so that we don't do BX twice
 
 % Compute first basis vector.
 ui = Pold*mldivide(Rold, mldivide(Rold', Pold'*(A*Xold)));

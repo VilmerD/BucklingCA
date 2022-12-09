@@ -6,7 +6,7 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_twobar(sizex,sizey,hel
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-loadL = 1/30*sizex;             % distribution length for point load
+loadL = 1/10*sizey;              % distribution length for point load
 suppH = 1.00*sizex;             % Distance from middle line to supports
 suppL = 1.00*loadL;             % Length of support
 neumL = 1.00*suppL;             % Length of boundary with neumann conditions at supports

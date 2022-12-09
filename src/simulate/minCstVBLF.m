@@ -2,24 +2,30 @@
 % Approximation of max mu using p-norm
 % Single density field with eta=0.5
 %% Add neccessary paths
-addpath(genpath('~/Documents/Projects/BucklingCA/data/'));
-addpath(genpath('~/Documents/Projects/BucklingCA/src/generate_geometry'));
-addpath(genpath('~/Documents/Projects/BucklingCA/src/solvers'));
+oldpath = path;
+PROJDIR = '~/Documents/Projects/BucklingCA';
+addpath(genpath(fullfile(PROJDIR, 'data')));
+addpath(genpath(fullfile(PROJDIR, '/src/generate_geometry')));
+addpath(genpath(fullfile(PROJDIR, '/src/solvers')));
 %% Display some information to user
 fprintf('Starting time of job: %s\n', datestr(datetime('now')));
 fprintf('Working directory: %s\n', pwd);
+fprintf('Project directory: %s\n', PROJDIR);
 tstart = tic;
-profile on;
 %% Load run data
 % If there is an inputfile named input.mat then load data from it, otherwise
 % use default parameters
 if isfile(fullfile(cd, 'input.mat'))
     variables = 'input.mat';
 else
-    variables = 'data/default_data.mat';
+    variables = 'data/test_data.mat';
 end
 fprintf('Input variables: \n');
 details(load(variables));
+%% Start profiler
+% If we want to count factorizations etc we must enable profiler
+load(variables, 'PROFILE');
+if PROFILE; profile on; end
 %% Domain size and discretization
 % element size (all elements are square)
 load(variables, 'domain', 'helem');
@@ -37,33 +43,46 @@ geometry_generation = str2func(sprintf('generate_%s', domain));
 load(variables, 'nevals');          % number of eigenvalues to consider
 compref = fullfile('data/compliance_reference', sprintf('%s.mat', domain));
 load(compref, 'lambda');
-lamstar = lambda(1);                % Critical BLF (Lc)
+lamstar = lambda(1);            % Critical BLF (Lc)
 load(variables, 'sf');              % Safety factor                
 lamstar = lamstar*sf;               % Target BLF is safety factor * Lc
 mustar = 1/lamstar;
 %% Continuation control
-load(variables, 'minloop', 'maxloop')
-
-load(variables, 'pphysstart', 'pphysend', 'dpphys')
+% Solid-isotropic material penalization continuation
+load(variables, 'pphysstart', 'pphysend', 'dpphys', 'contpace', 'contstart')
 contsteps = ceil((pphysend-pphysstart)/dpphys);
 pE = pphysstart;
 pS = pphysstart;
+minloopcont = contstart + contsteps*contpace;
 
-load(variables, 'pNstart', 'pNend');
-dpN = (pNend - pNstart)/contsteps;
+% P-norm exponent continuation
+load(variables, 'pNstart', 'pNend', 'dpN');
+pnsteps = ceil((pNend - pNstart)/dpN);
 pN = pNstart;
 
-load(variables, 'betastart', 'betaend');
-dbeta = (betaend - betastart)/contsteps;
+% Heaviside thresholding continuation
+load(variables, 'betastart', 'betaend', 'dbeta', 'betapace');
+betasteps = ceil((betaend-betastart)/dbeta);
 beta = betastart;
+minloopbeta = minloopcont + betasteps*betapace;
 
-load(variables, 'contstart')
-pace = (minloop-contstart)/contsteps;
+load(variables, 'minloop', 'maxloop')
 contnext = contstart;
+
+minloop = max(minloop, minloopbeta);
+maxloop = max(maxloop, minloopbeta+10);
 
 loop = 0;
 %% Track solution accuracy and work
-stats = zeros(minloop,11+2+nevals);
+% [f0val,fval',lambda',pE,pN,beta,chg_mma,chg_phs,chg_rms,chg_ang,symx,symy,symxy,SV];
+savevarnames = {'f0val', 'fval', 'comp', 'lambda', 'vol', ...
+    'pE', 'pN', 'beta', ...
+    'chg_mma', 'chg_pys', 'chg_rms', 'chg_ang', ...
+    'symx', 'symy', 'symxy', ...
+    'solve'};
+savevarinit = cell(size(savevarnames));
+stats = cell2struct(savevarinit, savevarnames, 2);
+
 tsol = zeros(maxloop, 4);
 res_stat = zeros(minloop, 1);
 res_eigs = zeros(minloop, nevals);
@@ -79,6 +98,7 @@ SOLVE_EIGS_EXACTLY = 0;
 SOLVE_ADJT_EXACTLY = 0;
 % Number of basis vectors
 load(variables, 'NBASIS_STAT', 'NBASIS_EIGS', 'NBASIS_ADJT');
+if NBASIS_ADJT == 0; NBASIS_ADJT = NBASIS_STAT; end
 % Orthogonalization type for eigenproblem
 load(variables, 'CAorthotype');
 CAorthovecs = [];          % Old eigenmodes if orthotype is 'old', else empty
@@ -100,7 +120,7 @@ if SHOW_DESIGN
             hold(ax(i), 'on');
             axis(ax(i), 'off');
             axis(ax(i), 'tight');
-            colormap(ax(i), 'summer');
+            colormap(ax(i), 'parula');
             pause(0.05);
         end
     end
@@ -184,15 +204,15 @@ bc(:, 2) = 0;
 % Initial guess
 load(variables, 'x0strat');
 switch lower(x0strat)
-    case 'homg'
-        x = 0.50*ones(nelem, 1);
-    case 'comp'
-        load(compref, 'x')
-    case 'rand'
-        x = rand([nelem, 1]);
-    otherwise
-        x = 0.50*ones(nelem, 1);
+    case 'homg'; x = 0.50*ones(nelem, 1);
+    case 'comp'; load(compref, 'x')
+    case 'rand'; x = 0.50*rand([nelem, 1]);
+    otherwise;   x = 0.50*ones(nelem, 1);
 end
+
+% Save design? 
+load(variables, 'SAVEX');
+XV = 0; if SAVEX; XV = zeros(nelem, maxloop); end
 
 xold1           = x;                    % xval, one iteration ago (provided that iter>1).
 xold2           = x;                    % xval, two iterations ago (provided that iter>2).
@@ -213,6 +233,8 @@ chg_mma         = inf;
 chg_rms         = inf;
 loop_chol       = loop;
 
+% Step size in mma
+load(variables, 'mmalen');
 
 % Compute initial density field
 xTilde = filter(x);
@@ -226,21 +248,20 @@ while ((loop < minloop ...
         && loop < maxloop
     %% Continuation
     loop = loop + 1;
-    CONTINUATION_ONGOING = ...
-        pE < pphysend...
-        || pN < pNend ...
-        || beta < betaend;
-    CONTINUATION_UPDATE = ...
-        CONTINUATION_ONGOING ...
-        && loop >= contnext;
+    % Check if continuation is still ongoing and if we should do a update
+    CONTINUATION_ONGOING = pE < pphysend || pN < pNend || beta < betaend;
+    CONTINUATION_UPDATE = CONTINUATION_ONGOING && loop >= contnext;
     if CONTINUATION_UPDATE
-        contnext = loop + pace;
-        if pE == pphysend && pN == pNend
+        % First update penalization and exponent, then update beta
+        if pE < pphysend && pN < pNend
+            contnext = loop + contpace;
+            pN = min(pNend,     pN + dpN);
+            pE = min(pphysend,  pE + dpphys);
+            pS = min(pphysend,  pS + dpphys);
+        else
+            contnext = loop + betapace;
             beta = min(betaend, beta + dbeta);
         end
-        pN = min(pNend,     pN + dpN);
-        pE = min(pphysend,  pE + dpphys);
-        pS = min(pphysend,  pS + dpphys);
     end
     %% Conditions for CA solve
     SOLVE_EXACTLY = ...
@@ -421,21 +442,14 @@ while ((loop < minloop ...
             if ck == 1
                 % First column is xPhys and objective and constraints
                 switch rk
-                    case 1
-                        xx = xPhys;
-                        tit = '\nu';
-                    case 2
-                        xx = log(abs(dmu_max_app));
-                        tit = '\partial \mu_c';
-                    case 3
-                        xx = dc;
-                        tit = '\partial c';
+                    case 1; xx = xPhys; tit = '\nu';
+                    case 2; xx = dmu_max_app; tit = '\partial \mu_c';
+                    case 3; xx = dc; tit = '\partial c';
                 end
             else
-                xx = log(abs(dmu(:, rk)));
-                tit = sprintf('\\partial \\mu_%i', rk);
+                xx = dmu(:, rk); tit = sprintf('\\partial \\mu_%i', rk);
             end
-            v_img = 2*(xx-min(xx))/(max(xx)-min(xx)) - 1;
+            v_img = (xx-min(xx))/(max(xx)-min(xx));
             imgk = sparse(i_img,j_img,v_img);
             axes(ax(k));                                        %#ok<LAXES>
             imagesc(imgk);
@@ -447,7 +461,7 @@ while ((loop < minloop ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'top');
 
-            pause(0.05);                    % To make sure plots are right size and in order
+            pause(0.05);
         end
         drawnow;
     end
@@ -487,21 +501,36 @@ while ((loop < minloop ...
     chg_rms     = rms(dxPhys);
     chg_ang     = dot(xPhys/norm(xPhys, 2), xPhysold1/norm(xPhysold1, 2));
     fct_ang     = dot(xPhys/norm(xPhys, 2), xPhysold/norm(xPhysold, 2));
+
+    % Compute symetry measures
+    xPmat = reshape(xPhys, sizey/helem, sizex/helem);
+    nxPmat = norm(xPmat, 'fro');
+    symx = norm(xPmat - flip(xPmat, 2), 'fro')/nxPmat;
+    symy = norm(xPmat - flip(xPmat, 1), 'fro')/nxPmat;
+    symxy = norm(xPmat - flip(flip(xPmat, 1), 2), 'fro')/nxPmat;
     %% Print results
     SV = bitor([SOLVE_STAT_EXACTLY, SOLVE_EIGS_EXACTLY, SOLVE_ADJT_EXACTLY], SOLVE_EXACTLY);
     fprintf([...
         'ITER: %3i OBJ: %+10.3e CONST: ', repmat('%+10.3e ', 1, m), ...
         'BLF: ', repmat('%+10.3e ', 1, nevals), 'BLFAPP %+10.3e ', ...
+        'pE: %5.2f pN: %5.2f BETAHS: %5.2f ', ...
         'CH: %5.3f CHPHS: %5.3f RMSPHS: %5.3f CHGANG: %5.3f FCTANG: %5.3f ', ...
-        'pE: %5.2f pN: %5.2f BETAHS: %3i ', ...
         'EXACT(S/E/A): %1i %1i %1i \n'],...
-        loop,f0val,fval',lambda',lambda_min_app,chg_mma,chg_phs,chg_rms,chg_ang,fct_ang,pE,pN,beta,SV);
-    %% Save data
-    stats(loop,1:11+m+nevals) = [f0val,fval',lambda',chg_mma,chg_phs,chg_rms,chg_ang,pE,pN,beta,SV];
+        loop,f0val,fval',lambda',lambda_min_app,pE,pN,beta,chg_mma,chg_phs,chg_rms,chg_ang,fct_ang,SV);
+    %% Store data
+    vals = {f0val,fval,comp,lambda,v,pE,pN,beta,...
+        chg_mma,chg_phs,chg_rms,chg_ang,...
+        symx,symy,symxy,SV};
+    stats(loop) = cell2struct(vals, savevarnames, 2);
+    if SAVEX; XV(:, loop) = xPhys; end
 end
 %% Save data etc
-runtime = toc(tstart);
-profile_data = profile('info');
+% Stop profiler and save results
+profile_data = {};
+if PROFILE
+    runtime = toc(tstart);
+    profile_data = profile('info');
+end
 % Save figure
 if SHOW_DESIGN
     pause(2.00); saveas(gcf, 'design.png'); pause(2.00);
@@ -510,10 +539,12 @@ end
 DOMVARS = load(domaindata);
 INPVARS = load(variables);
 save('results.mat', ...
-    'xPhys', 'xTilde', 'x', 'stats', 'tsol', 'profile_data',...
+    'xPhys', 'xTilde', 'x', 'XV', 'stats', 'tsol', 'profile_data',...
     'INPVARS', 'DOMVARS', 'T', ...
     'res_stat', 'mag_stat', ...
     'res_eigs', 'mag_eigs', ...
     'res_adjt', 'mag_adjt');
 
+%% Finish
+path = oldpath;
 fprintf('\nFinished job at %s \n', datestr(datetime('now')));

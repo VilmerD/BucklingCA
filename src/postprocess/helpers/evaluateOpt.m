@@ -17,8 +17,8 @@ fnc_table = profile_data.FunctionTable;
 nTri(1) = countCalls(fnc_table, 'msolveq', 49);
 nTri(1) = nTri(1) + countCalls(fnc_table, 'CASBON', [11, 19]);
 
-% for eigenvalueproblem
-nTri(2) = countCalls(fnc_table, 'CAEEON', [11, 22]);
+% for eigenproblem
+nTri(2) = countCalls(fnc_table, 'CAEEON', [12, 23]);
 % the triangular solves in eigs is in a lambda-expression
 trisolver = 'eigs>@(v)solve(dR,permB''*applyA(permB*solve(dR,v,false)),true)';  % name of function
 itrisolver = cellfun(@(n) strcmp(n, trisolver), {fnc_table.FunctionName});      % index in table
