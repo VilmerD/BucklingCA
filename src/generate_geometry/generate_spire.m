@@ -6,7 +6,7 @@ function [X,T,row,col,solids,voids,F,freedofs] = generate_spire(sizex,sizey,hele
 %% Define grid parameters 
 dx = helem;                     % element size in x-direction
 dy = helem;                     % element size in y-direction
-loadL = 1/10*sizex;             % distribution length for point load
+loadL = 1/30*sizey;             % distribution length for point load
 neumL = 1.00*loadL;
 %% Create nodal grid for FEA and optimization
 [Xnode,Ynode] = meshgrid(0:dx:sizex,0:dy:sizey);

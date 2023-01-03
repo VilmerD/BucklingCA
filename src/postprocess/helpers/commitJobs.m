@@ -7,8 +7,8 @@ srcdirs = {'designs', 'history'};
 dstdir = 'report';
 
 % Batches and jobs to commit
-farms = {'ref010', 'rom016'};
-jobs = {21:23, 51:53};
+farms = {'ref022', 'rom034'};
+jobs = {0:2, 9:11};
 
 % Load safety-factors
 geoms = cell(numel(farms), 1);
@@ -26,6 +26,22 @@ for k = 1:numel(farms)
         geoms{k, l} = domain;
     end
 end
+
+%% Format table
+% Format LaTeX table from data, because I'm too lazy to do data entry
+filename = 'results/report/values.txt';
+fid = fopen(filename, 'w+');
+
+% Write jobs and numbers in jobs
+fprintf(fid, 'JOBS\n\n');
+fprintf(fid, '%-10s \t %-10s\n', 'Farm names', 'Job IDs');
+for k = 1:length(jobs)
+    fk = farms{k};
+    jk = jobs{k};
+    format = ['%-10s \t ', repmat('%i, ', 1, numel(jk)), '\n'];
+    fprintf(fid, format, fk, jk);
+end
+fprintf(fid, '\n');
 
 %% Move figures
 % Pattern to remove numbering
@@ -65,11 +81,6 @@ for k = 1:numel(farms)
         end
     end
 end
-
-%% Format table
-% Format LaTeX table from data, because I'm too lazy to do data entry
-filename = 'results/report/values.txt';
-fid = fopen(filename, 'w+');
 
 %% Compliance reference
 lsdat = zeros(size(sfs));

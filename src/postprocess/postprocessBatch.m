@@ -1,5 +1,5 @@
 %% Given a design computes blf, volume fraction, compliance etc
-farm = 'ref010';
+farm = 'rom034';
 
 source_dir = fullfile('processed_data/', farm);
 
@@ -15,7 +15,7 @@ for k = 0:nj-1
         datmat_wrk(k+1) = evaluateOpt(jobdir);
     end
 
-    if ~mod(k, nj/10); fprintf('%%'); end
+    if ~mod(k, ceil(nj/10)); fprintf('%%'); end
 end
 fprintf("\n");
 

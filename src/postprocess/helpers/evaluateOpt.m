@@ -3,8 +3,10 @@ function S = evaluateOpt(jobdir)
 load(fullfile(jobdir, 'results.mat'), 'stats', 'profile_data', 'tsol');
 
 % Iterations and factorizations
-nIts    = sum(stats(:, 1)  ~=0);
-nFact   = sum(stats(:, end)==1);
+SOLVES = [stats.solve];
+STAT_SOLVES = SOLVES(1:3:end);
+nIts    = length(STAT_SOLVES);
+nFact   = sum(STAT_SOLVES);
 nCA     = nIts - nFact;
 
 fnc_table = profile_data.FunctionTable;
@@ -15,7 +17,7 @@ fnc_table = profile_data.FunctionTable;
 
 % for linear equilibrium and adjoints
 nTri(1) = countCalls(fnc_table, 'msolveq', 49);
-nTri(1) = nTri(1) + countCalls(fnc_table, 'CASBON', [11, 19]);
+nTri(1) = nTri(1) + countCalls(fnc_table, 'CASBON', [9, 17]);
 
 % for eigenproblem
 nTri(2) = countCalls(fnc_table, 'CAEEON', [12, 23]);

@@ -59,26 +59,4 @@ for k = 1:n
     L(k, k) = L_RED;
 end
 
-% Reorthogonalize vectors for 'old' case
-if strcmpi(otype, 'old')
-    X = reorthonormalize(X, B);
-    L = diag(dot(X, A*X));
-end
-end
-
-function X = reorthonormalize(X, A)
-% Reorthogonalizes the vectors in X with respect to A
-x1 = X(:, 1);
-X(:, 1) = x1/sqrt(x1'*A*x1);
-for k = 2:size(X, 2)
-    % Extract element
-    vk = X(:, k-1);
-
-    % Project
-    X(:, k:end) = X(:, k:end) - ((vk'*A)*X(:, k:end)).*vk;
-    
-    % Normalize 
-    X(:, k) = X(:, k)/sqrt(X(:, k)'*A*X(:, k));
-end
-
 end

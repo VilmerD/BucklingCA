@@ -1,5 +1,5 @@
 %% Plot the compliance and blf's
-farm = 'ref012';
+farm = 'rom034';
 
 source_dir = fullfile('processed_data', farm);
 destin_dir = fullfile('results/history', sprintf('blfopt_%s', farm));

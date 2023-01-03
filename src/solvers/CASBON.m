@@ -1,9 +1,7 @@
 function V = CASBON(A, b, Rold, Pold, dA, s)
 % V = CASBON(A, b, Rold, Pold, Aold, s) computes s orthonormal basis vectors using CA for
 % the static problem A*x = b. R is the cholesky factorization of the old matrix Aold.
-% 
-% [V, U, T, R] = CASBON(A, b, Rold, Aold, s) computes the basis vectors and returns the 
-% intermediate basis vectors required for a consistent sensitivity analysis.
+
 n = size(b, 1);
 AV = zeros(n, s);
 

@@ -253,12 +253,12 @@ while ((loop < minloop ...
     CONTINUATION_UPDATE = CONTINUATION_ONGOING && loop >= contnext;
     if CONTINUATION_UPDATE
         % First update penalization and exponent, then update beta
-        if pE < pphysend && pN < pNend
+        if pE < pphysend || pN < pNend
             contnext = loop + contpace;
             pN = min(pNend,     pN + dpN);
             pE = min(pphysend,  pE + dpphys);
             pS = min(pphysend,  pS + dpphys);
-        else
+        elseif beta < betaend
             contnext = loop + betapace;
             beta = min(betaend, beta + dbeta);
         end
